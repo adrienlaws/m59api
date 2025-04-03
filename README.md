@@ -1,9 +1,18 @@
-# Meridian 59 API
-
+# Meridian 59 API or `m59api`
 This is a FastAPI-based API for managing the **Meridian 59** server.
-It ocntains two executables
-- a discord bot
-- a fastapi server
+
+## Running m59api
+1. Running as a PyPI-installed Package
+If you installed m59api via pip, you can run it using:
+
+`m59api --host 127.0.0.1 --port 8000 --reload`
+This launches the server using the CLI entry point defined in the package.
+
+2. Running from Source (Development Mode)
+If you cloned this repository and installed the dependencies manually, you can start the FastAPI server using:
+
+`python main.py`
+This is useful for development and testing.
 
 
 ## What
