@@ -1,30 +1,34 @@
-from setuptools import setup, Extension
-import sysconfig
+from setuptools import setup, find_packages
 
-python_include_dir = sysconfig.get_path('include')
-python_lib_dir = sysconfig.get_config_var('LIBDIR')
-
-if not python_lib_dir:
-    python_lib_dir = r'C:\Users\toko\AppData\Local\Programs\Python\Python310\libs'  # Adjust path as needed
-
-module = Extension(
-    'apifn',
-    sources=['apifn.c'],
-    include_dirs=[
-        '.', 
-        python_include_dir,
-        # Add any other necessary include paths
-    ],
-    library_dirs=[python_lib_dir],
-    libraries=['python310'],  # Adjust the version as needed
-    define_macros=[('SOME_MACRO', '1'), ('ANOTHER_MACRO', '1')],
-    extra_compile_args=['/DWIN32', '/D_WINDOWS', '/W3'],
-    language='c'
-)
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
-    name='apifn',
-    version='1.0',
-    description='Python C extension for Blakserv API',
-    ext_modules=[module]
+    name="m59api",
+    version="1.0.0",
+    author="Adrien Laws",
+    author_email="laws.adrien@gmail.com",
+    description="A FastAPI-based API for managing the Meridian 59 server.",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/adrienlaws/m59api",
+    packages=find_packages(),
+    python_requires=">=3.7",
+    install_requires=[
+        "fastapi>=0.70.0",
+        "uvicorn>=0.15.0",
+        "httpx>=0.23.0",
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Framework :: FastAPI",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+    entry_points={
+        "console_scripts": [
+            "m59api=m59api.cli:main",
+        ],
+    },
+    include_package_data=True,  # Include additional files specified in MANIFEST.in
 )
