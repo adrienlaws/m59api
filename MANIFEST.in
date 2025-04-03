@@ -1,5 +1,5 @@
+recursive-include m59api *.py
 include README.md
 include requirements.txt
 exclude main.py
-recursive-include m59api *.py
 exclude tests/*
