@@ -1,10 +1,9 @@
 import uvicorn
 import argparse
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run the Meridian 59 API server."
-    )
+    parser = argparse.ArgumentParser(description="Run the Meridian 59 API server.")
     parser.add_argument(
         "--host",
         type=str,

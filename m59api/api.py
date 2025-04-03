@@ -12,6 +12,7 @@ if not DISCORD_WEBHOOK_URL:
 router = APIRouter()
 client = MaintenanceClient()
 
+
 def check_access(response: str):
     """
     Check if the server denies access to the command.
@@ -19,9 +20,9 @@ def check_access(response: str):
     """
     if "You do not have access to this command." in response:
         raise HTTPException(
-            status_code=403,
-            detail="You do not have access to this command."
+            status_code=403, detail="You do not have access to this command."
         )
+
 
 @router.post("/admin/discord-webhook")
 async def send_to_discord_webhook(message: str):
@@ -36,9 +37,7 @@ async def send_to_discord_webhook(message: str):
     """
     try:
         # Prepare the payload
-        payload = {
-            "content": message
-        }
+        payload = {"content": message}
 
         # Send the POST request to the Discord webhook
         async with httpx.AsyncClient() as client:
@@ -48,16 +47,14 @@ async def send_to_discord_webhook(message: str):
         if response.status_code != 204:  # Discord returns 204 No Content on success
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"Failed to send message to Discord: {response.text}"
+                detail=f"Failed to send message to Discord: {response.text}",
             )
 
-        return {
-            "status": "success",
-            "message": "Message sent to Discord successfully."
-        }
+        return {"status": "success", "message": "Message sent to Discord successfully."}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/who")
 async def get_online_players():
@@ -69,22 +66,26 @@ async def get_online_players():
         response = await asyncio.get_event_loop().run_in_executor(
             None, client.send_command, "who"
         )
-        
+
         check_access(response)
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         players = []
-        
+
         # Find the header line
         for i, line in enumerate(lines):
-            if 'Name' in line and 'Act' in line and 'Ver' in line:
+            if "Name" in line and "Act" in line and "Ver" in line:
                 # Next line is separator, actual data starts after
                 headers = [h.strip() for h in line.split() if h.strip()]
-                
+
                 # Process each player line
-                for player_line in lines[i+2:]:  # Skip header and separator
-                    if player_line and not player_line.startswith('>') and not player_line.startswith('--'):
+                for player_line in lines[i + 2 :]:  # Skip header and separator
+                    if (
+                        player_line
+                        and not player_line.startswith(">")
+                        and not player_line.startswith("--")
+                    ):
                         # Split on multiple spaces
                         parts = [p for p in player_line.split() if p.strip()]
                         if len(parts) >= 6:  # Ensure we have enough parts
@@ -94,7 +95,9 @@ async def get_online_players():
                             # Extract objectID from location if present
                             if "(" in location and ")" in location:
                                 try:
-                                    object_id = int(location.split("(")[-1].split(")")[0])
+                                    object_id = int(
+                                        location.split("(")[-1].split(")")[0]
+                                    )
                                 except ValueError:
                                     object_id = None
 
@@ -105,25 +108,22 @@ async def get_online_players():
                                 "session": parts[3],
                                 "ip": parts[4],
                                 "location": location,
-                                "objectID": object_id
+                                "objectID": object_id,
                             }
                             players.append(player)
                 break
-        
-        return {
-            "status": "success",
-            "players": players,
-            "total_players": len(players)
-        }
-        
+
+        return {"status": "success", "players": players, "total_players": len(players)}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/send-users")
 async def send_users_message(message: str):
     """
     Send message to all logged in users
-    
+
     Args:
         message (str): The message to send to all users
     """
@@ -136,6 +136,7 @@ async def send_users_message(message: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/admin/status")
 async def get_server_status():
     """
@@ -146,78 +147,73 @@ async def get_server_status():
         response = await asyncio.get_event_loop().run_in_executor(
             None, client.send_command, "show status"
         )
-        
+
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         status_data = {}
-        
+
         for line in lines:
             line = line.strip()
-            
+
             # Skip empty lines and separators
-            if not line or line.startswith('>') or line.startswith('---'):
+            if not line or line.startswith(">") or line.startswith("---"):
                 continue
-                
+
             # Parse version and build info
             if "BlakSton Server" in line:
-                parts = line.split('(')
+                parts = line.split("(")
                 status_data["version"] = parts[0].replace("BlakSton Server", "").strip()
                 status_data["build_date"] = parts[1].replace(")", "").strip()
-                
+
             # Parse current time
             elif "Current time is" in line:
-                status_data["current_time"] = line.replace("Current time is", "").strip()
-                
+                status_data["current_time"] = line.replace(
+                    "Current time is", ""
+                ).strip()
+
             # Parse uptime
             elif "System started at" in line:
-                parts = line.split('(')
-                status_data["start_time"] = parts[0].replace("System started at", "").strip()
+                parts = line.split("(")
+                status_data["start_time"] = (
+                    parts[0].replace("System started at", "").strip()
+                )
                 status_data["uptime"] = parts[1].replace(")", "").strip()
-                
+
             # Parse performance metrics
             elif "Interpreted" in line:
                 status_data["instructions"] = {
                     "total": line.split()[1],
-                    "period": line.split()[-2]
+                    "period": line.split()[-2],
                 }
-                
+
             # Parse message stats
             elif "Handled" in line:
                 parts = line.split()
-                status_data["messages"] = {
-                    "top_level": parts[1],
-                    "total": parts[-2]
-                }
-                
+                status_data["messages"] = {"top_level": parts[1], "total": parts[-2]}
+
             # Parse account info
             elif "Active accounts:" in line:
-                status_data["accounts"] = {
-                    "active": line.split(":")[1].strip()
-                }
-                
+                status_data["accounts"] = {"active": line.split(":")[1].strip()}
+
             # Parse session info
             elif "sessions logged on" in line:
-                status_data["sessions"] = {
-                    "count": line.split()[2]
-                }
-                
+                status_data["sessions"] = {"count": line.split()[2]}
+
             # Parse resource usage
             elif "Used" in line and "nodes" in line:
                 parts = line.split()
                 node_type = parts[-1].replace("nodes", "").strip()
                 status_data.setdefault("resources", {})[node_type] = parts[1]
-                
+
             # Parse timer info
             elif "Watching" in line and "timers" in line:
                 status_data["active_timers"] = line.split()[1]
 
-        return {
-            "status": "success",
-            "server_status": status_data
-        }
-        
+        return {"status": "success", "server_status": status_data}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/memory")
 async def get_memory_usage():
@@ -228,31 +224,30 @@ async def get_memory_usage():
         )
 
         check_access(response)
-        
-        lines = [line.strip() for line in response.split('\r\n')]
-        memory_data = {
-            "timestamp": "",
-            "components": {},
-            "total_mb": 0
-        }
-        
+
+        lines = [line.strip() for line in response.split("\r\n")]
+        memory_data = {"timestamp": "", "components": {}, "total_mb": 0}
+
         # Skip header section
-        start_index = next((i for i, line in enumerate(lines) 
-                          if "System Memory" in line), 0)
-        
+        start_index = next(
+            (i for i, line in enumerate(lines) if "System Memory" in line), 0
+        )
+
         for line in lines[start_index:]:
             # Skip empty lines, prompts, headers and separators
-            if (not line or 
-                line.startswith('>') or 
-                '-' in line or       # Skip any line with dashes
-                "System Memory" in line):
+            if (
+                not line
+                or line.startswith(">")
+                or "-" in line  # Skip any line with dashes
+                or "System Memory" in line
+            ):
                 continue
-            
+
             # Get timestamp
             if "2025" in line:
                 memory_data["timestamp"] = line
                 continue
-            
+
             # Get total memory
             if "Total" in line:
                 parts = line.split()
@@ -264,24 +259,22 @@ async def get_memory_usage():
                 except (ValueError, IndexError):
                     continue
                 continue
-            
+
             # Parse component lines - must have exactly 2 parts
             parts = line.split()
             if len(parts) == 2:
                 component = parts[0].lower()
                 try:
-                    value = int(parts[1].replace(',', ''))
+                    value = int(parts[1].replace(",", ""))
                     memory_data["components"][component] = value
                 except ValueError:
                     continue
 
-        return {
-            "status": "success",
-            "memory": memory_data
-        }
-        
+        return {"status": "success", "memory": memory_data}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-clock")
 async def show_clock():
@@ -302,19 +295,22 @@ async def show_clock():
                 # Find the part that contains the epoch time
                 epoch_time_index = parts.index("reads") + 1
                 epoch_time = int(parts[epoch_time_index])
-                date_time = " ".join(parts[epoch_time_index + 1:]).strip("().")
+                date_time = " ".join(parts[epoch_time_index + 1 :]).strip("().")
                 return {
                     "status": "success",
                     "epoch_time": epoch_time,
-                    "date_time": date_time
+                    "date_time": date_time,
                 }
             except (ValueError, IndexError) as e:
-                raise HTTPException(status_code=500, detail="Error parsing response: " + str(e))
+                raise HTTPException(
+                    status_code=500, detail="Error parsing response: " + str(e)
+                )
         else:
             raise HTTPException(status_code=500, detail="Unexpected response format")
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-account/{account}")
 async def show_account(account: str):
@@ -339,7 +335,7 @@ async def show_account(account: str):
             raise HTTPException(status_code=404, detail=f"Account {account} not found.")
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         account_data = {}
         user_data = []
 
@@ -370,30 +366,31 @@ async def show_account(account: str):
                         "account": account,
                         "name": name,
                         "credits": credits,
-                        "last_login": last_login
+                        "last_login": last_login,
                     }
             elif parsing_users:  # Parse user details
                 parts = line.split(maxsplit=4)  # Split into at most 4 parts
                 if len(parts) == 4:
-                    user_data.append({
-                        "account": parts[0],
-                        "object": parts[1],
-                        "class": parts[2],
-                        "name": parts[3]
-                    })
+                    user_data.append(
+                        {
+                            "account": parts[0],
+                            "object": parts[1],
+                            "class": parts[2],
+                            "name": parts[3],
+                        }
+                    )
 
         # Ensure account_data is not empty
         if not account_data:
-            raise HTTPException(status_code=404, detail="Account not found or invalid response format.")
+            raise HTTPException(
+                status_code=404, detail="Account not found or invalid response format."
+            )
 
-        return {
-            "status": "success",
-            "account": account_data,
-            "users": user_data
-        }
+        return {"status": "success", "account": account_data, "users": user_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-belong/{object_id}")
 async def show_belong(object_id: int):
@@ -415,10 +412,13 @@ async def show_belong(object_id: int):
 
         # Check if the object does not exist
         if f"{object_id} owns the following objects -" not in response:
-            raise HTTPException(status_code=404, detail=f"Object {object_id} not found or owns no objects.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Object {object_id} not found or owns no objects.",
+            )
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         owner = None
         objects = []
         current_object = None
@@ -441,7 +441,7 @@ async def show_belong(object_id: int):
                 current_object = {
                     "object_id": int(parts[2]),
                     "class": parts[-1],
-                    "properties": {}
+                    "properties": {},
                 }
                 continue
 
@@ -464,14 +464,11 @@ async def show_belong(object_id: int):
             objects.append(current_object)
 
         # Return the parsed data
-        return {
-            "status": "success",
-            "owner": owner,
-            "objects": objects
-        }
+        return {"status": "success", "owner": owner, "objects": objects}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-class/{name}")
 async def show_class(name: str):
@@ -499,13 +496,13 @@ async def show_class(name: str):
             raise HTTPException(status_code=404, detail=f"Class {name} not found.")
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         class_data = {
             "name": None,
             "id": None,
             "file": None,
             "variables": [],
-            "messages": []
+            "messages": [],
         }
 
         for line in lines:
@@ -526,10 +523,9 @@ async def show_class(name: str):
                 parts = line.split("=", 1)
                 variable_name = parts[0].strip(": VAR").strip()
                 variable_value = parts[1].strip() if len(parts) > 1 else None
-                class_data["variables"].append({
-                    "name": variable_name,
-                    "value": variable_value
-                })
+                class_data["variables"].append(
+                    {"name": variable_name, "value": variable_value}
+                )
                 continue
 
             # Parse messages
@@ -538,13 +534,11 @@ async def show_class(name: str):
                 class_data["messages"].append(message_name)
                 continue
 
-        return {
-            "status": "success",
-            "class": class_data
-        }
+        return {"status": "success", "class": class_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-configuration")
 async def show_configuration():
@@ -560,7 +554,7 @@ async def show_configuration():
 
         check_access(response)
 
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         configuration = {}
         current_section = None
         current_key = None
@@ -592,13 +586,11 @@ async def show_configuration():
 
         print("Final configuration:", configuration)
 
-        return {
-            "status": "success",
-            "configuration": configuration
-        }
+        return {"status": "success", "configuration": configuration}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-constant/{constant_name}")
 async def show_constant(constant_name: str):
@@ -618,9 +610,11 @@ async def show_constant(constant_name: str):
         check_access(response)
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         if len(lines) < 2 or "There is no value for" in lines[1]:
-            raise HTTPException(status_code=404, detail=f"Constant '{constant_name}' not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Constant '{constant_name}' not found."
+            )
 
         # Extract the constant value from the second line
         parts = lines[1].split("=", 1)
@@ -632,14 +626,12 @@ async def show_constant(constant_name: str):
 
         return {
             "status": "success",
-            "constant": {
-                "name": constant_name,
-                "value": constant_value
-            }
+            "constant": {"name": constant_name, "value": constant_value},
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-list/{list_id}")
 async def show_list(list_id: int):
@@ -659,32 +651,37 @@ async def show_list(list_id: int):
         check_access(response)
 
         # Parse the response
-        lines = response.split('\r\n')
-        if len(lines) < 3 or not lines[1].startswith(":<") or not lines[-1].startswith(":>"):
-            raise HTTPException(status_code=404, detail=f"List '{list_id}' not found or invalid response format.")
+        lines = response.split("\r\n")
+        if (
+            len(lines) < 3
+            or not lines[1].startswith(":<")
+            or not lines[-1].startswith(":>")
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail=f"List '{list_id}' not found or invalid response format.",
+            )
 
         # Extract list elements
         list_elements = []
-        for line in lines[2:-1]:  # Skip the first two lines (command echo and :<) and the last line (:>)
+        for line in lines[
+            2:-1
+        ]:  # Skip the first two lines (command echo and :<) and the last line (:>)
             line = line.strip()
             if line.startswith(":"):
                 parts = line.split(None, 2)  # Split into type and value
-                if len(parts) == 3 and parts[1] != "[" and parts[1] != "]":  # Skip structural markers
+                if (
+                    len(parts) == 3 and parts[1] != "[" and parts[1] != "]"
+                ):  # Skip structural markers
                     element_type = parts[1].strip(":")  # Remove the leading colon
                     element_value = parts[2].strip()
-                    list_elements.append({
-                        "type": element_type,
-                        "value": element_value
-                    })
+                    list_elements.append({"type": element_type, "value": element_value})
 
-        return {
-            "status": "success",
-            "list_id": list_id,
-            "elements": list_elements
-        }
+        return {"status": "success", "list_id": list_id, "elements": list_elements}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-listnode/{list_id}")
 async def show_listnode(list_id: int):
@@ -705,27 +702,36 @@ async def show_listnode(list_id: int):
         rest_match = re.search(r"rest\s*=\s*([A-Z$]+)\s+(.+)", response)
 
         if not first_match or not rest_match:
-            raise HTTPException(status_code=500, detail="Could not parse first or rest values.")
+            raise HTTPException(
+                status_code=500, detail="Could not parse first or rest values."
+            )
 
         # Parse 'first' and 'rest'
-        first_parsed = {"type": first_match.group(1), "value": first_match.group(2).strip()}
-        rest_parsed = {"type": rest_match.group(1), "value": rest_match.group(2).strip()}
+        first_parsed = {
+            "type": first_match.group(1),
+            "value": first_match.group(2).strip(),
+        }
+        rest_parsed = {
+            "type": rest_match.group(1),
+            "value": rest_match.group(2).strip(),
+        }
 
         return {
             "status": "success",
             "list_id": list_id,
             "first": first_parsed,
-            "rest": rest_parsed
+            "rest": rest_parsed,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/admin/show-message/{class_identifier}/{message_identifier}")
 async def show_message(class_identifier: str, message_identifier: str):
     """
     Show details for a specific message by its class and message identifiers.
-    
+
     Args:
         class_identifier (str): The class name or ID.
         message_identifier (str): The message name or ID.
@@ -744,12 +750,12 @@ async def show_message(class_identifier: str, message_identifier: str):
         check_access(response)
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         parsed_data = {
             "class": None,
             "message": None,
             "parameters": [],
-            "description": None
+            "description": None,
         }
 
         in_parameters_section = False
@@ -767,34 +773,35 @@ async def show_message(class_identifier: str, message_identifier: str):
                 elif line:  # Parse parameter line
                     parts = line.split(None, 2)
                     if len(parts) == 3:
-                        parsed_data["parameters"].append({
-                            "name": parts[0],
-                            "type": parts[1],
-                            "value": parts[2]
-                        })
+                        parsed_data["parameters"].append(
+                            {"name": parts[0], "type": parts[1], "value": parts[2]}
+                        )
             elif line.startswith("No description"):
                 parsed_data["description"] = "No description"
 
         # Ensure all required fields are populated
         if not parsed_data["class"] or not parsed_data["message"]:
-            raise HTTPException(status_code=500, detail="Failed to parse class or message details.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse class or message details."
+            )
 
         return {
             "status": "success",
             "class": parsed_data["class"],
             "message": parsed_data["message"],
             "parameters": parsed_data["parameters"],
-            "description": parsed_data["description"]
+            "description": parsed_data["description"],
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/admin/show-name/{character_name}")
 async def show_name(character_name: str):
     """
     Show the object ID of a specific character by their name.
-    
+
     Args:
         character_name (str): The name of the character to query.
     """
@@ -813,10 +820,12 @@ async def show_name(character_name: str):
 
         # Check if the character does not exist
         if f"Cannot find user with name {character_name}" in response:
-            raise HTTPException(status_code=404, detail=f"Character '{character_name}' not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Character '{character_name}' not found."
+            )
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         object_id = None
 
         for line in lines:
@@ -833,16 +842,19 @@ async def show_name(character_name: str):
 
         # Ensure object_id is found
         if object_id is None:
-            raise HTTPException(status_code=500, detail="Failed to parse object ID from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse object ID from response."
+            )
 
         return {
             "status": "success",
             "character_name": character_name,
-            "object_id": object_id
+            "object_id": object_id,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-object/{object_id}")
 async def show_object(object_id: int):
@@ -870,15 +882,13 @@ async def show_object(object_id: int):
 
         # Check if the object does not exist
         if f"Cannot find object {object_id}" in response:
-            raise HTTPException(status_code=404, detail=f"Object {object_id} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Object {object_id} not found."
+            )
 
         # Parse the response
-        lines = response.split('\r\n')
-        object_data = {
-            "object_id": object_id,
-            "class": None,
-            "properties": {}
-        }
+        lines = response.split("\r\n")
+        object_data = {"object_id": object_id, "class": None, "properties": {}}
 
         current_property = None
 
@@ -899,7 +909,9 @@ async def show_object(object_id: int):
                 # If there's a current property, save it
                 if current_property:
                     key, value = current_property.split("=", 1)
-                    object_data["properties"][key.strip(": ").strip()] = value.strip().rstrip(":>").strip()
+                    object_data["properties"][key.strip(": ").strip()] = (
+                        value.strip().rstrip(":>").strip()
+                    )
 
                 # Start a new property
                 current_property = line
@@ -910,25 +922,27 @@ async def show_object(object_id: int):
         # Add the last property if it exists
         if current_property:
             key, value = current_property.split("=", 1)
-            object_data["properties"][key.strip(": ").strip()] = value.strip().rstrip(":>").strip()
+            object_data["properties"][key.strip(": ").strip()] = (
+                value.strip().rstrip(":>").strip()
+            )
 
         # Ensure the class is found
         if not object_data["class"]:
-            raise HTTPException(status_code=500, detail="Failed to parse object class from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse object class from response."
+            )
 
-        return {
-            "status": "success",
-            "object": object_data
-        }
+        return {"status": "success", "object": object_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-string/{string_id}")
 async def show_string(string_id: int):
     """
     Show the content of a specific string by its ID.
-    
+
     Args:
         string_id (int): The ID of the string to query.
     """
@@ -947,10 +961,12 @@ async def show_string(string_id: int):
 
         # Check if the string does not exist
         if f"Cannot find string {string_id}" in response:
-            raise HTTPException(status_code=404, detail=f"String {string_id} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"String {string_id} not found."
+            )
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         string_content = []
         in_string_section = False
 
@@ -970,14 +986,11 @@ async def show_string(string_id: int):
         # Join the string content, even if it's empty
         content = "\n".join(string_content).strip()
 
-        return {
-            "status": "success",
-            "string_id": string_id,
-            "content": content
-        }
+        return {"status": "success", "string_id": string_id, "content": content}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-usage")
 async def show_usage():
@@ -998,7 +1011,7 @@ async def show_usage():
         check_access(response)
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         usage_data = {}
 
         for line in lines:
@@ -1015,21 +1028,21 @@ async def show_usage():
 
         # Ensure sessions data is found
         if "sessions" not in usage_data:
-            raise HTTPException(status_code=500, detail="Failed to parse usage data from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse usage data from response."
+            )
 
-        return {
-            "status": "success",
-            "usage": usage_data
-        }
+        return {"status": "success", "usage": usage_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-user/{username}")
 async def show_user(username: str):
     """
     Show details for a specific user by their username.
-    
+
     Args:
         username (str): The username to query.
     """
@@ -1051,7 +1064,7 @@ async def show_user(username: str):
             raise HTTPException(status_code=404, detail=f"User '{username}' not found.")
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         user_data = {}
 
         for line in lines:
@@ -1070,27 +1083,27 @@ async def show_user(username: str):
                         "account": int(parts[0]),
                         "object_id": int(parts[1]),
                         "class": parts[2],
-                        "name": parts[3]
+                        "name": parts[3],
                     }
                 break
 
         # Ensure user data is found
         if not user_data:
-            raise HTTPException(status_code=500, detail="Failed to parse user data from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse user data from response."
+            )
 
-        return {
-            "status": "success",
-            "user": user_data
-        }
+        return {"status": "success", "user": user_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-resource/{resource_identifier}")
 async def show_resource(resource_identifier: str):
     """
     Show details for a specific resource by its ID or name.
-    
+
     Args:
         resource_identifier (str): The ID (int) or name (string) of the resource to query.
     """
@@ -1108,11 +1121,16 @@ async def show_resource(resource_identifier: str):
         check_access(response)
 
         # Check if the resource does not exist
-        if "There is no resource with id" in response or "There is no resource named" in response:
-            raise HTTPException(status_code=404, detail=f"Resource '{resource_identifier}' not found.")
+        if (
+            "There is no resource with id" in response
+            or "There is no resource named" in response
+        ):
+            raise HTTPException(
+                status_code=404, detail=f"Resource '{resource_identifier}' not found."
+            )
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         resource_data = {}
 
         for line in lines:
@@ -1130,21 +1148,21 @@ async def show_resource(resource_identifier: str):
                     resource_data = {
                         "id": int(parts[0]),
                         "name": parts[1],
-                        "value": parts[3]
+                        "value": parts[3],
                     }
                 break
 
         # Ensure resource data is found
         if not resource_data:
-            raise HTTPException(status_code=500, detail="Failed to parse resource data from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse resource data from response."
+            )
 
-        return {
-            "status": "success",
-            "resource": resource_data
-        }
+        return {"status": "success", "resource": resource_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-table/{table_id}")
 async def show_table(table_id: int):
@@ -1172,12 +1190,8 @@ async def show_table(table_id: int):
             raise HTTPException(status_code=404, detail=f"Table {table_id} not found.")
 
         # Parse the response
-        lines = response.split('\r\n')
-        table_data = {
-            "table_id": table_id,
-            "size": None,
-            "entries": []
-        }
+        lines = response.split("\r\n")
+        table_data = {"table_id": table_id, "size": None, "entries": []}
 
         # Extract table size
         size_match = re.search(rf"Table {table_id} \(size (\d+)\)", response)
@@ -1186,33 +1200,39 @@ async def show_table(table_id: int):
 
         # Ensure we have a valid table size
         if table_data["size"] is None:
-            raise HTTPException(status_code=500, detail="Failed to parse table data from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse table data from response."
+            )
 
         # Regex pattern to match hash entries with both INT and RESOURCE keys
-        entry_pattern = re.compile(r"hash\s+(\d+)\s*:\s*((?:\(key (INT|RESOURCE) \d+ val OBJECT \d+\)\s*)+)")
+        entry_pattern = re.compile(
+            r"hash\s+(\d+)\s*:\s*((?:\(key (INT|RESOURCE) \d+ val OBJECT \d+\)\s*)+)"
+        )
 
         for match in entry_pattern.finditer(response):
             hash_key = int(match.group(1))
             key_val_pairs = match.group(2)
 
             # Extract all (key TYPE <value> val OBJECT <value>) pairs
-            pairs = re.findall(r"\(key (INT|RESOURCE) (\d+) val OBJECT (\d+)\)", key_val_pairs)
+            pairs = re.findall(
+                r"\(key (INT|RESOURCE) (\d+) val OBJECT (\d+)\)", key_val_pairs
+            )
 
             for key_type, key_value, val_value in pairs:
-                table_data["entries"].append({
-                    "hash": hash_key,
-                    "key_type": key_type,
-                    "key": int(key_value),
-                    "value": int(val_value)
-                })
+                table_data["entries"].append(
+                    {
+                        "hash": hash_key,
+                        "key_type": key_type,
+                        "key": int(key_value),
+                        "value": int(val_value),
+                    }
+                )
 
-        return {
-            "status": "success",
-            "table": table_data
-        }
+        return {"status": "success", "table": table_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/show-timer/{timer_id}")
 async def show_timer(timer_id: int):
@@ -1240,7 +1260,7 @@ async def show_timer(timer_id: int):
             raise HTTPException(status_code=404, detail=f"Timer {timer_id} not found.")
 
         # Parse the response
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         timer_data = {}
 
         for line in lines:
@@ -1255,21 +1275,21 @@ async def show_timer(timer_id: int):
                     "timer_id": int(parts[0]),
                     "remaining_ms": int(parts[1]),
                     "object_id": int(parts[2]),
-                    "message": parts[3]
+                    "message": parts[3],
                 }
                 break
 
         # Ensure timer data is found
         if not timer_data:
-            raise HTTPException(status_code=500, detail="Failed to parse timer data from response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse timer data from response."
+            )
 
-        return {
-            "status": "success",
-            "timer": timer_data
-        }
+        return {"status": "success", "timer": timer_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-account-name/{account_id}")
 async def set_account_name(account_id: int, new_name: str):
@@ -1295,16 +1315,25 @@ async def set_account_name(account_id: int, new_name: str):
 
         # Check if the account does not exist
         if f"Cannot find account {account_id}" in response:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Account {account_id} not found."
+            )
 
         # Check if the response indicates success
         if f"Changing name of account {account_id}" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set account name. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set account name. Unexpected response.",
+            )
 
         # Extract old and new account names from the response
-        match = re.search(r"Changing name of account \d+ from '(.*?)' to '(.*?)'\.", response)
+        match = re.search(
+            r"Changing name of account \d+ from '(.*?)' to '(.*?)'\.", response
+        )
         if not match:
-            raise HTTPException(status_code=500, detail="Failed to parse account name change response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse account name change response."
+            )
 
         old_account_name, new_account_name = match.groups()
 
@@ -1312,11 +1341,12 @@ async def set_account_name(account_id: int, new_name: str):
             "status": "success",
             "account_id": account_id,
             "old_account_name": old_account_name,
-            "new_account_name": new_account_name
+            "new_account_name": new_account_name,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-account-object/{account_id}/{object_id}")
 async def set_account_object(account_id: int, object_id: int):
@@ -1342,9 +1372,13 @@ async def set_account_object(account_id: int, object_id: int):
 
         # Handle specific error cases
         if f"Cannot find account {account_id}" in response:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Account {account_id} not found."
+            )
         if f"Object {object_id} does not exist" in response:
-            raise HTTPException(status_code=404, detail=f"Object {object_id} does not exist.")
+            raise HTTPException(
+                status_code=404, detail=f"Object {object_id} does not exist."
+            )
 
         # Handle warnings
         warning_message = None
@@ -1355,18 +1389,32 @@ async def set_account_object(account_id: int, object_id: int):
 
         # Check if the response indicates success
         if f"Associated account {account_id} with object {object_id}" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set account object. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set account object. Unexpected response.",
+            )
 
         # Extract old and new account names from the response
         old_account_name = None
         new_account_name = None
-        match = re.search(r"Removing user object \d+ from the old account \d+.", response)
+        match = re.search(
+            r"Removing user object \d+ from the old account \d+.", response
+        )
         if match:
-            old_account_name = match.group(0).split("from the old account")[1].strip().strip(".")
+            old_account_name = (
+                match.group(0).split("from the old account")[1].strip().strip(".")
+            )
 
-        match_new = re.search(r"Associated account \d+ with object \d+ as a user.", response)
+        match_new = re.search(
+            r"Associated account \d+ with object \d+ as a user.", response
+        )
         if match_new:
-            new_account_name = match_new.group(0).split("Associated account")[1].split("with object")[0].strip()
+            new_account_name = (
+                match_new.group(0)
+                .split("Associated account")[1]
+                .split("with object")[0]
+                .strip()
+            )
 
         return {
             "status": "success",
@@ -1374,11 +1422,12 @@ async def set_account_object(account_id: int, object_id: int):
             "object_id": object_id,
             "old_account_name": old_account_name,
             "new_account_name": new_account_name,
-            "warning_message": warning_message
+            "warning_message": warning_message,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-account-password/{account_id}")
 async def set_account_password(account_id: int, new_password: str):
@@ -1404,12 +1453,17 @@ async def set_account_password(account_id: int, new_password: str):
 
         # Check if the account does not exist
         if f"Cannot find account {account_id}" in response:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Account {account_id} not found."
+            )
 
         # Check if the response indicates success
         match = re.search(r"Set password for account (\d+) \((.*?)\)\.", response)
         if not match:
-            raise HTTPException(status_code=500, detail="Failed to set account password. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set account password. Unexpected response.",
+            )
 
         account_id = int(match.group(1))
         account_name = match.group(2)
@@ -1417,11 +1471,12 @@ async def set_account_password(account_id: int, new_password: str):
         return {
             "status": "success",
             "account_id": account_id,
-            "account_name": account_name
+            "account_name": account_name,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-class")
 async def set_class(class_name: str, var_name: str, value_type: str, value: str):
@@ -1449,28 +1504,42 @@ async def set_class(class_name: str, var_name: str, value_type: str, value: str)
 
         # Handle specific error cases
         if f"Cannot find class named {class_name}" in response:
-            raise HTTPException(status_code=404, detail=f"Class '{class_name}' not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Class '{class_name}' not found."
+            )
         if f"Cannot find classvar named {var_name}" in response:
-            raise HTTPException(status_code=404, detail=f"Class variable '{var_name}' not found in class '{class_name}'.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Class variable '{var_name}' not found in class '{class_name}'.",
+            )
         if f"'{value_type}' is not a tag." in response:
-            raise HTTPException(status_code=400, detail=f"Invalid value type '{value_type}'.")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid value type '{value_type}'."
+            )
         if f"'{value}' is not valid data." in response:
-            raise HTTPException(status_code=400, detail=f"Invalid value '{value}' for type '{value_type}'.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid value '{value}' for type '{value_type}'.",
+            )
 
         # Check if the response indicates success
         if f"> set class {class_name} {var_name} {value_type} {value}" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set class variable. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set class variable. Unexpected response.",
+            )
 
         return {
             "status": "success",
             "class_name": class_name,
             "var_name": var_name,
             "value_type": value_type,
-            "value": value
+            "value": value,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-object")
 async def set_object(object_id: int, property_name: str, value_type: str, value: str):
@@ -1498,43 +1567,61 @@ async def set_object(object_id: int, property_name: str, value_type: str, value:
 
         # Handle specific error cases
         if "Invalid object id" in response:
-            raise HTTPException(status_code=404, detail=f"Invalid object ID {object_id} (or it has been deleted).")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Invalid object ID {object_id} (or it has been deleted).",
+            )
 
         if "Property" in response and "doesn't exist" in response:
             # Extract the class name and ID from the response
-            match = re.search(r"Property .* doesn't exist \(at least for CLASS (\w+) \((\d+)\)\)", response)
+            match = re.search(
+                r"Property .* doesn't exist \(at least for CLASS (\w+) \((\d+)\)\)",
+                response,
+            )
             if match:
                 target_class_name = match.group(1)
                 target_class_id = match.group(2)
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Property '{property_name}' doesn't exist (at least for CLASS {target_class_name} ({target_class_id}))."
+                    detail=f"Property '{property_name}' doesn't exist (at least for CLASS {target_class_name} ({target_class_id})).",
                 )
             else:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Property '{property_name}' doesn't exist (at least for the object's class)."
+                    detail=f"Property '{property_name}' doesn't exist (at least for the object's class).",
                 )
 
         if f"'{value_type}' is not a tag." in response:
-            raise HTTPException(status_code=400, detail=f"Invalid value type '{value_type}'.")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid value type '{value_type}'."
+            )
         if f"'{value}' is not valid data." in response:
-            raise HTTPException(status_code=400, detail=f"Invalid value '{value}' for type '{value_type}'.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid value '{value}' for type '{value_type}'.",
+            )
 
         # Check if the response indicates success
-        if f"> set object {object_id} {property_name} {value_type} {value}" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set object property. Unexpected response.")
+        if (
+            f"> set object {object_id} {property_name} {value_type} {value}"
+            not in response
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set object property. Unexpected response.",
+            )
 
         return {
             "status": "success",
             "object_id": object_id,
             "property_name": property_name,
             "value_type": value_type,
-            "value": value
+            "value": value,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-config-boolean")
 async def set_config_boolean(group: str, name: str, value: str):
@@ -1560,25 +1647,33 @@ async def set_config_boolean(group: str, name: str, value: str):
         if "Missing parameter" in response:
             raise HTTPException(status_code=400, detail="Missing required parameters.")
         if "Boolean configuration options must be 'yes' or 'no'" in response:
-            raise HTTPException(status_code=400, detail="Boolean configuration options must be 'Yes' or 'No'.")
+            raise HTTPException(
+                status_code=400,
+                detail="Boolean configuration options must be 'Yes' or 'No'.",
+            )
         if "Unable to find configure group" in response:
-            raise HTTPException(status_code=404, detail=f"Unable to find configure group {group} name {name}.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unable to find configure group {group} name {name}.",
+            )
         if "This configure option is not a boolean" in response:
-            raise HTTPException(status_code=400, detail=f"Configuration option {group} {name} is not a boolean.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Configuration option {group} {name} is not a boolean.",
+            )
 
         # Check if the response indicates success
         if f"Configure option group {group} name {name} is now set to" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set boolean configuration. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set boolean configuration. Unexpected response.",
+            )
 
-        return {
-            "status": "success",
-            "group": group,
-            "name": name,
-            "value": value
-        }
+        return {"status": "success", "group": group, "name": name, "value": value}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-config-integer")
 async def set_config_integer(group: str, name: str, value: int):
@@ -1604,23 +1699,28 @@ async def set_config_integer(group: str, name: str, value: int):
         if "Missing parameter" in response:
             raise HTTPException(status_code=400, detail="Missing required parameters.")
         if "Unable to find configure group" in response:
-            raise HTTPException(status_code=404, detail=f"Unable to find configure group {group} name {name}.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unable to find configure group {group} name {name}.",
+            )
         if "This configure option is not an integer" in response:
-            raise HTTPException(status_code=400, detail=f"Configuration option {group} {name} is not an integer.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Configuration option {group} {name} is not an integer.",
+            )
 
         # Check if the response indicates success
         if f"Configure option group {group} name {name} is now set to" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set integer configuration. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set integer configuration. Unexpected response.",
+            )
 
-        return {
-            "status": "success",
-            "group": group,
-            "name": name,
-            "value": value
-        }
+        return {"status": "success", "group": group, "name": name, "value": value}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/set-config-string")
 async def set_config_string(group: str, name: str, value: str):
@@ -1646,23 +1746,28 @@ async def set_config_string(group: str, name: str, value: str):
         if "Missing parameter" in response:
             raise HTTPException(status_code=400, detail="Missing required parameters.")
         if "Unable to find configure group" in response:
-            raise HTTPException(status_code=404, detail=f"Unable to find configure group {group} name {name}.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unable to find configure group {group} name {name}.",
+            )
         if "This configure option is not a string" in response:
-            raise HTTPException(status_code=400, detail=f"Configuration option {group} {name} is not a string.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Configuration option {group} {name} is not a string.",
+            )
 
         # Check if the response indicates success
         if f"Configure option group {group} name {name} is now set to" not in response:
-            raise HTTPException(status_code=500, detail="Failed to set string configuration. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set string configuration. Unexpected response.",
+            )
 
-        return {
-            "status": "success",
-            "group": group,
-            "name": name,
-            "value": value
-        }
+        return {"status": "success", "group": group, "name": name, "value": value}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/suspend-account")
 async def suspend_account(hours: int, account_identifier: str):
@@ -1687,12 +1792,19 @@ async def suspend_account(hours: int, account_identifier: str):
         if "Missing parameter" in response:
             raise HTTPException(status_code=400, detail="Missing required parameters.")
         if "Cannot find account" in response:
-            raise HTTPException(status_code=404, detail=f"Account '{account_identifier}' not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Account '{account_identifier}' not found."
+            )
         if "Suspension of account" in response and "failed" in response:
-            raise HTTPException(status_code=500, detail=f"Failed to suspend account '{account_identifier}'.")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to suspend account '{account_identifier}'.",
+            )
 
         # Check if the response indicates success
-        match = re.search(r"Account (\d+) \((.*?)\) is suspended until (.+)\.", response)
+        match = re.search(
+            r"Account (\d+) \((.*?)\) is suspended until (.+)\.", response
+        )
         if not match:
             raise HTTPException(status_code=500, detail="Unexpected response format.")
 
@@ -1707,11 +1819,12 @@ async def suspend_account(hours: int, account_identifier: str):
             "account_id": account_id,
             "account_name": account_name,
             "hours_added": hours,
-            "suspended_until": suspended_until
+            "suspended_until": suspended_until,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/unsuspend-account")
 async def unsuspend_account(account_identifier: str):
@@ -1733,14 +1846,18 @@ async def unsuspend_account(account_identifier: str):
 
         # Handle specific error cases
         if "Cannot find account" in response:
-            raise HTTPException(status_code=404, detail=f"Account '{account_identifier}' not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Account '{account_identifier}' not found."
+            )
         if "is unsuspended" not in response:
             raise HTTPException(status_code=500, detail="Unexpected response format.")
 
         # Extract account details from the response
         match = re.search(r"Account (\d+) \((.*?)\) is unsuspended\.", response)
         if not match:
-            raise HTTPException(status_code=500, detail="Failed to parse unsuspend response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse unsuspend response."
+            )
 
         account_id = match.group(1)
         account_name = match.group(2)
@@ -1749,11 +1866,12 @@ async def unsuspend_account(account_identifier: str):
             "status": "success",
             "account_identifier": account_identifier,
             "account_id": account_id,
-            "account_name": account_name
+            "account_name": account_name,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/suspend-user")
 async def suspend_user(hours: int, username: str):
@@ -1780,10 +1898,14 @@ async def suspend_user(hours: int, username: str):
         if "Cannot find user" in response:
             raise HTTPException(status_code=404, detail=f"User '{username}' not found.")
         if "Suspension of account" in response and "failed" in response:
-            raise HTTPException(status_code=500, detail=f"Failed to suspend user '{username}'.")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to suspend user '{username}'."
+            )
 
         # Check if the response indicates success
-        match = re.search(r"Account (\d+) \((.*?)\) is suspended until (.+)\.", response)
+        match = re.search(
+            r"Account (\d+) \((.*?)\) is suspended until (.+)\.", response
+        )
         if not match:
             raise HTTPException(status_code=500, detail="Unexpected response format.")
 
@@ -1798,11 +1920,12 @@ async def suspend_user(hours: int, username: str):
             "account_id": account_id,
             "account_name": account_name,
             "hours_added": hours,
-            "suspended_until": suspended_until
+            "suspended_until": suspended_until,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/unsuspend-user")
 async def unsuspend_user(username: str):
@@ -1831,7 +1954,9 @@ async def unsuspend_user(username: str):
         # Extract account details from the response
         match = re.search(r"Account (\d+) \((.*?)\) is unsuspended\.", response)
         if not match:
-            raise HTTPException(status_code=500, detail="Failed to parse unsuspend response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to parse unsuspend response."
+            )
 
         account_id = match.group(1)
         account_name = match.group(2)
@@ -1840,11 +1965,12 @@ async def unsuspend_user(username: str):
             "status": "success",
             "username": username,
             "account_id": account_id,
-            "account_name": account_name
+            "account_name": account_name,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/send-object")
 async def send_object(
@@ -1857,7 +1983,7 @@ async def send_object(
     param5: str = None,
     param6: str = None,
     param7: str = None,
-    param8: str = None
+    param8: str = None,
 ):
     """
     Send a message to a specific object.
@@ -1884,27 +2010,50 @@ async def send_object(
 
         # Handle specific error cases
         if "Invalid object id" in response:
-            raise HTTPException(status_code=404, detail=f"Object ID {object_id} not found or invalid.")
+            raise HTTPException(
+                status_code=404, detail=f"Object ID {object_id} not found or invalid."
+            )
         if "Unknown message" in response:
-            raise HTTPException(status_code=400, detail=f"Unknown message '{message}' for object {object_id}.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown message '{message}' for object {object_id}.",
+            )
         if "Invalid parameter" in response:
             raise HTTPException(status_code=400, detail="Invalid parameter provided.")
 
         # Check if the response includes the expected return message
-        match = re.search(r":< return from OBJECT \d+ MESSAGE .*?\r\n: (.*?)\r\n:>", response, re.DOTALL)
+        match = re.search(
+            r":< return from OBJECT \d+ MESSAGE .*?\r\n: (.*?)\r\n:>",
+            response,
+            re.DOTALL,
+        )
         return_value = match.group(1).strip() if match else None
 
         return {
             "status": "success",
             "object_id": object_id,
             "message": message,
-            "parameters": [param for param in [param1, param2, param3, param4, param5, param6, param7, param8] if param],
+            "parameters": [
+                param
+                for param in [
+                    param1,
+                    param2,
+                    param3,
+                    param4,
+                    param5,
+                    param6,
+                    param7,
+                    param8,
+                ]
+                if param
+            ],
             "return": return_value,
-            "raw_response": response.strip()  # Include the raw response for debugging
+            "raw_response": response.strip(),  # Include the raw response for debugging
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/send-class")
 async def send_class(
@@ -1917,7 +2066,7 @@ async def send_class(
     param5: str = None,
     param6: str = None,
     param7: str = None,
-    param8: str = None
+    param8: str = None,
 ):
     """
     Send a message to all instances of a specific class.
@@ -1944,27 +2093,48 @@ async def send_class(
 
         # Handle specific error cases
         if "Invalid class name" in response:
-            raise HTTPException(status_code=404, detail=f"Class '{class_name}' not found or invalid.")
+            raise HTTPException(
+                status_code=404, detail=f"Class '{class_name}' not found or invalid."
+            )
         if "Unknown message" in response:
-            raise HTTPException(status_code=400, detail=f"Unknown message '{message}' for class '{class_name}'.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown message '{message}' for class '{class_name}'.",
+            )
         if "Invalid parameter" in response:
             raise HTTPException(status_code=400, detail="Invalid parameter provided.")
 
         # Check if the response includes the expected return message
-        match = re.search(r":< (\d+) instance\(s\) sent MESSAGE \d+ .*?\r\n:>", response, re.DOTALL)
+        match = re.search(
+            r":< (\d+) instance\(s\) sent MESSAGE \d+ .*?\r\n:>", response, re.DOTALL
+        )
         instances_sent = int(match.group(1)) if match else None
 
         return {
             "status": "success",
             "class_name": class_name,
             "message": message,
-            "parameters": [param for param in [param1, param2, param3, param4, param5, param6, param7, param8] if param],
+            "parameters": [
+                param
+                for param in [
+                    param1,
+                    param2,
+                    param3,
+                    param4,
+                    param5,
+                    param6,
+                    param7,
+                    param8,
+                ]
+                if param
+            ],
             "instances_sent": instances_sent,
-            "raw_response": response.strip()  # Include the raw response for debugging
+            "raw_response": response.strip(),  # Include the raw response for debugging
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/save-game")
 async def save_game():
@@ -1986,7 +2156,9 @@ async def save_game():
 
         # Handle specific error cases
         if "Garbage collecting and saving game" not in response:
-            raise HTTPException(status_code=500, detail="Failed to save game. Unexpected response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to save game. Unexpected response."
+            )
 
         # Extract save time if available
         match = re.search(r"Save time is \((\d+)\)", response)
@@ -1995,11 +2167,12 @@ async def save_game():
         return {
             "status": "success",
             "message": "Game saved successfully.",
-            "save_time": save_time
+            "save_time": save_time,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/save-configuration")
 async def save_configuration():
@@ -2021,15 +2194,16 @@ async def save_configuration():
 
         # Handle specific error cases
         if "Configuration saved." not in response:
-            raise HTTPException(status_code=500, detail="Failed to save configuration. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to save configuration. Unexpected response.",
+            )
 
-        return {
-            "status": "success",
-            "message": "Configuration saved successfully."
-        }
+        return {"status": "success", "message": "Configuration saved successfully."}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/terminate-save")
 async def terminate_save():
@@ -2054,7 +2228,10 @@ async def terminate_save():
 
         # Check if the response indicates saving and termination
         save_complete = "Garbage collecting and saving game... done." in response
-        termination_confirmed = "Terminating server. All connections, including yours, about to be lost" in response
+        termination_confirmed = (
+            "Terminating server. All connections, including yours, about to be lost"
+            in response
+        )
 
         # If the expected output is received, return success
         if save_complete and termination_confirmed:
@@ -2063,11 +2240,14 @@ async def terminate_save():
                 "message": "Server termination initiated after saving.",
                 "save_complete": save_complete,
                 "termination_confirmed": termination_confirmed,
-                "raw_response": response.strip()
+                "raw_response": response.strip(),
             }
 
         # If the expected output is not received, raise an error
-        raise HTTPException(status_code=500, detail="Failed to terminate server with save. Unexpected response.")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to terminate server with save. Unexpected response.",
+        )
 
     except Exception as e:
         # Handle the case where the connection is forcibly closed
@@ -2077,11 +2257,12 @@ async def terminate_save():
                 "message": "Server termination initiated after saving. Connection was forcibly closed by the server.",
                 "save_complete": True,
                 "termination_confirmed": True,
-                "raw_response": response.strip() if 'response' in locals() else None
+                "raw_response": response.strip() if "response" in locals() else None,
             }
 
         # Raise other exceptions as usual
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/terminate-nosave")
 async def terminate_nosave():
@@ -2108,7 +2289,7 @@ async def terminate_nosave():
         return {
             "status": "success",
             "message": "Server termination initiated without saving.",
-            "raw_response": response.strip() if response else None
+            "raw_response": response.strip() if response else None,
         }
 
     except Exception as e:
@@ -2117,11 +2298,12 @@ async def terminate_nosave():
             return {
                 "status": "success",
                 "message": "Server termination initiated without saving. Connection was forcibly closed by the server.",
-                "raw_response": None
+                "raw_response": None,
             }
 
         # Raise other exceptions as usual
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/mark")
 async def mark():
@@ -2145,11 +2327,12 @@ async def mark():
         return {
             "status": "success",
             "message": "Marker added to the server logs.",
-            "raw_response": response.strip() if response else None
+            "raw_response": response.strip() if response else None,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/lock")
 async def lock(reason: str = "The game is temporarily closed for maintenance."):
@@ -2177,16 +2360,19 @@ async def lock(reason: str = "The game is temporarily closed for maintenance."):
 
         # Check if the response indicates success
         if f"Locking game <{reason}>" not in response:
-            raise HTTPException(status_code=500, detail="Failed to lock the game. Unexpected response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to lock the game. Unexpected response."
+            )
 
         return {
             "status": "success",
             "message": f"Game locked successfully with reason: {reason}",
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/unlock")
 async def unlock():
@@ -2211,16 +2397,20 @@ async def unlock():
 
         # Check if the response indicates success
         if "Unlocking game." not in response:
-            raise HTTPException(status_code=500, detail="Failed to unlock the game. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to unlock the game. Unexpected response.",
+            )
 
         return {
             "status": "success",
             "message": "Game unlocked successfully.",
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/reload-game")
 async def reload_game(save_time: int = 0):
@@ -2247,12 +2437,15 @@ async def reload_game(save_time: int = 0):
         check_access(response)
 
         # Check if the response includes expected output
-        if "Unloading game... done." in response and "Loading game... done." in response:
+        if (
+            "Unloading game... done." in response
+            and "Loading game... done." in response
+        ):
             return {
                 "status": "success",
                 "message": f"Game reloaded successfully from save time {save_time}.",
                 "save_time": save_time,
-                "raw_response": response.strip()
+                "raw_response": response.strip(),
             }
 
         # If no reliable output, assume success
@@ -2260,11 +2453,12 @@ async def reload_game(save_time: int = 0):
             "status": "success",
             "message": "Command sent successfully.",
             "save_time": save_time,
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/reload-motd")
 async def reload_motd():
@@ -2292,14 +2486,14 @@ async def reload_motd():
             return {
                 "status": "success",
                 "message": "MOTD reloaded successfully.",
-                "raw_response": response.strip()
+                "raw_response": response.strip(),
             }
 
         # If no reliable output, assume success
         return {
             "status": "success",
             "message": "Command sent successfully.",
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
@@ -2308,11 +2502,12 @@ async def reload_motd():
             return {
                 "status": "success",
                 "message": "MOTD reloaded successfully. Connection was forcibly closed by the server.",
-                "raw_response": None
+                "raw_response": None,
             }
 
         # Raise other exceptions as usual
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/reload-packages")
 async def reload_packages():
@@ -2337,16 +2532,20 @@ async def reload_packages():
 
         # Check if the response indicates success
         if "Reloading packages... done." not in response:
-            raise HTTPException(status_code=500, detail="Failed to reload packages. Unexpected response.")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to reload packages. Unexpected response.",
+            )
 
         return {
             "status": "success",
             "message": "Packages reloaded successfully.",
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/reload-system")
 async def reload_system():
@@ -2373,23 +2572,34 @@ async def reload_system():
         normalized_response = " ".join(response.split())
 
         # Parse the response for specific steps
-        garbage_collection_success = "Garbage collecting and saving game... done." in normalized_response
-        unloading_success = "Unloading game, kodbase, and .bof ... done." in normalized_response
-        loading_success = "Loading game, kodbase, and .bof ... done." in normalized_response
+        garbage_collection_success = (
+            "Garbage collecting and saving game... done." in normalized_response
+        )
+        unloading_success = (
+            "Unloading game, kodbase, and .bof ... done." in normalized_response
+        )
+        loading_success = (
+            "Loading game, kodbase, and .bof ... done." in normalized_response
+        )
 
         # Return structured response
         return {
             "status": "success",
             "steps": {
-                "garbage_collection": "success" if garbage_collection_success else "failed",
+                "garbage_collection": (
+                    "success" if garbage_collection_success else "failed"
+                ),
                 "saving_game": "success" if garbage_collection_success else "failed",
-                "reloading_components": "success" if unloading_success and loading_success else "failed"
+                "reloading_components": (
+                    "success" if unloading_success and loading_success else "failed"
+                ),
             },
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/admin/read/{filename}")
 async def admin_read(filename: str):
@@ -2415,10 +2625,13 @@ async def admin_read(filename: str):
 
         # Check if the file could not be opened
         if f"Error opening {filename}" in response:
-            raise HTTPException(status_code=404, detail=f"File '{filename}' not found or cannot be opened.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"File '{filename}' not found or cannot be opened.",
+            )
 
         # Parse the response to extract commands and their outputs
-        lines = response.split('\r\n')
+        lines = response.split("\r\n")
         command_outputs = []
         current_command = None
 
@@ -2436,7 +2649,7 @@ async def admin_read(filename: str):
                 # Start a new command
                 current_command = {
                     "command": line[2:].strip(),  # Remove ">>" and trim
-                    "response": ""
+                    "response": "",
                 }
             elif current_command:
                 # Append the line to the current command's response
@@ -2455,14 +2668,11 @@ async def admin_read(filename: str):
             if "You do not have access to this command." in cmd["response"]:
                 cmd["error"] = "Access denied for this command."
 
-        return {
-            "status": "success",
-            "filename": filename,
-            "commands": command_outputs
-        }
+        return {"status": "success", "filename": filename, "commands": command_outputs}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/say")
 async def admin_say(message: str):
@@ -2490,12 +2700,14 @@ async def admin_say(message: str):
 
         # Check if the response indicates success
         if "Said." not in response:
-            raise HTTPException(status_code=500, detail="Failed to send message. Unexpected response.")
+            raise HTTPException(
+                status_code=500, detail="Failed to send message. Unexpected response."
+            )
 
         return {
             "status": "success",
             "message": f"Sent message: {message}",
-            "raw_response": response.strip()
+            "raw_response": response.strip(),
         }
 
     except Exception as e:
