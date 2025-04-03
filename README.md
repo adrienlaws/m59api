@@ -1,5 +1,5 @@
 # Meridian 59 API or `m59api`
-This is a FastAPI-based API for managing the **Meridian 59** server.
+This is a FastAPI-based API for managing a **Meridian 59** server.
 
 ## Running m59api
 1. Running as a PyPI-installed Package
@@ -83,11 +83,6 @@ Before running the application, you need to set the `DISCORD_WEBHOOK_URL` enviro
 ## Running it
 - uvicorn main:app --reload --log-level debug
     - optional windows batch file that does the same: `debug.bat`
-- discord_bot.py
-    - optional Discord bot
-    - populate config.py with your `DISCORD_BOT_TOKEN` and `API_BASE_URL`
-    - `python discord_bot.py`
-
 
 ## Testing
 - Access the API documentation at `http://127.0.0.1:8000/docs`
