@@ -1,33 +1,80 @@
 # Meridian 59 API or `m59api`
 This is a FastAPI-based API for managing a **Meridian 59** server.
 
-## Running m59api
-1. Running as a PyPI-installed Package
-If you installed m59api via pip, you can run it using:
+---
 
-`m59api --host 127.0.0.1 --port 8000 --reload`
+## Configuration
+
+Before running the application, you need to set the `DISCORD_WEBHOOK_URL` environment variable. This variable is used to send messages to Discord.
+
+**On Windows (Command Prompt or PowerShell):**
+```cmd
+set DISCORD_WEBHOOK_URL=https://your-discord-webhook-url
+```
+
+**On macOS/Linux (bash/zsh):**
+```bash
+export DISCORD_WEBHOOK_URL=https://your-discord-webhook-url
+```
+
+**With Docker:**
+```sh
+docker run --rm -it \
+  -e DISCORD_WEBHOOK_URL=https://your-discord-webhook-url \
+  -p 5959:5959 -p 8000:8000 -p 9998:9998 \
+  m59-linux-test
+```
+
+> **Tip:** Never commit secrets (like webhooks or API keys) to your repository. Always use environment variables or a `.env` file (with [python-dotenv](https://pypi.org/project/python-dotenv/)) for local development.
+
+---
+
+## Running m59api
+
+### 1. Running as a PyPI-installed Package
+If you installed m59api via pip, you can run it using:
+```sh
+m59api --host 127.0.0.1 --port 8000 --reload
+```
 This launches the server using the CLI entry point defined in the package.
 
-2. Running from Source (Development Mode)
+### 2. Running from Source (Development Mode)
 If you cloned this repository and installed the dependencies manually, you can start the FastAPI server using:
-
-`python main.py`
+```sh
+uvicorn m59api.main:app --reload --log-level debug
+```
 This is useful for development and testing.
 
+### 3. Running with Docker
+```sh
+docker run --rm -it \
+  -e DISCORD_WEBHOOK_URL=https://your-discord-webhook-url \
+  -p 5959:5959 -p 8000:8000 -p 9998:9998 \
+  m59-linux-test
+```
 
-## What
-- Created FastAPI routes for server management in `api.py`
-- Configured FastAPI server to connect to the BlakSton server maintenance port
+---
+
+## Features
+
+- FastAPI routes for server management in `api.py`
+- Connects to the BlakSton server maintenance port
 - Example API endpoints:
   - GET /api/v1/admin/who
   - POST /api/v1/admin/send-users
 
+---
+
 ## Why
+
 - Enable modern web-based management interface for blakserv
 - Provide secure, RESTful API access to server functions
 - Allow external tools/services to interact with the server
 
+---
+
 ## Technical Flow
+
 ```ascii
 FastAPI Client -> FastAPI Routes -> Maintenance Port -> Blakserv
    (HTTP)          (api.py)       (TCP Socket)         (C Core)
@@ -41,7 +88,10 @@ FastAPI Client -> FastAPI Routes -> Maintenance Port -> Blakserv
                         Blakserv
 ```
 
+---
+
 ## Implementation Details
+
 ### FastAPI Router (`api.py`):
 
 - REST endpoint definitions
@@ -53,7 +103,10 @@ FastAPI Client -> FastAPI Routes -> Maintenance Port -> Blakserv
 - TCP socket connection to BlakSton server maintenance port
 - Command sending and response handling
 
-## Configuration
+---
+
+## Server Configuration
+
 Add the following to the `blakserv.cfg` in the server running directory:
 ```
 [Socket]             
@@ -61,72 +114,57 @@ MaintenancePort      9998
 MaintenanceMask      0.0.0.0
 ```
 
-config.py - defines discord webhook url if used for discord bot
+---
 
-#### **Configuration**
-Before running the application, you need to set the `DISCORD_WEBHOOK_URL` environment variable. This variable is used to send messages to Discord.
+## API Documentation
 
-1. **On Windows**:
-   Open a Command Prompt or PowerShell and run:
-   ```cmd
-   set DISCORD_WEBHOOK_URL=https://your-discord-webhook-url 
-   ```
+- Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- ReDoc UI: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-2.  **On macOS/Linux**:
- Open a terminal and run:
+---
 
-`export DISCORD_WEBHOOK_URL=https://your-discord-webhook-url`
+## Testing Endpoints
 
-
-## Features
-
-## Running it
-- uvicorn main:app --reload --log-level debug
-    - optional windows batch file that does the same: `debug.bat`
-
-## Testing
-- Access the API documentation at `http://127.0.0.1:8000/docs`
-- Test the endpoints using curl or a web browser:
-   ```bash
-   curl -X GET "http://127.0.0.1:8000/api/v1/admin/who"
-   curl -X GET "http://127.0.0.1:8000/api/v1/admin/status"
-   curl -X GET "http://127.0.0.1:8000/api/v1/admin/memory"
-   curl -X POST "http://127.0.0.1:8000/api/v1/admin/send-users?message=Hello"
-   ```
-
-``` mermaid
-graph TD
-    subgraph Users
-        P[Players] --> W[Web Interface]
-        A[Admins] --> W
-        I[IoT/Automations] --> API[FastAPI Endpoints]
-    end
-    
-    subgraph Server Integration
-        W --> API
-        API --> M[Maintenance Port]
-        M --> B[Blakserv]
-        B --> G[Game World]
-    end
+```bash
+curl -X GET "http://127.0.0.1:8000/api/v1/admin/who"
+curl -X GET "http://127.0.0.1:8000/api/v1/admin/status"
+curl -X GET "http://127.0.0.1:8000/api/v1/admin/memory"
+curl -X POST "http://127.0.0.1:8000/api/v1/admin/send-users?message=Hello"
 ```
+
+---
+
+## Security & Best Practices
+
+- **Never commit secrets** (webhooks, API keys, passwords) to your repository.
+- Use environment variables or a `.env` file (with `python-dotenv`) for local development.
+- Use `--reload` only for development, not in production.
+- Always test your app in a production-like environment before deployment.
+
+---
+
 ## Installation
 
-### 1 Install dependencies
-`pip install -r requirements.txt`
+### 1. Install dependencies
+```sh
+pip install -r requirements.txt
+```
 (Or use Poetry, see below)
 
-### 2 Run the server:
-`uvicorn main:app --reload`
+### 2. Run the server:
+```sh
+uvicorn m59api.main:app --reload
+```
 
-### 3 Open API documentation:
+### 3. Open API documentation:
 
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc UI: http://127.0.0.1:8000/redoc
 
+---
 
-## Configuration
+## CLI Arguments (`cli.py`)
 
-### cli.py
 Command-Line Arguments:
 ```
 --host: Allows the user to specify the host (e.g., 0.0.0.0 for external access).
@@ -137,6 +175,7 @@ Command-Line Arguments:
 Default Values:
 
 If no arguments are provided, the app will run on 127.0.0.1:8000 with info log level and no auto-reload.
+
 Customizable:
 
 Users can override the defaults by providing arguments when running the m59api command.
@@ -144,17 +183,22 @@ Users can override the defaults by providing arguments when running the m59api c
 Use --reload only in development:
 
 It’s a great tool for speeding up development but should not be used in production.
+
 Use Environment-Specific Configurations:
 
 Use environment variables or configuration files to differentiate between development and production environments.
 For example:
 
+```sh
 export ENV=development
 m59api --reload
+```
 
 Test Without --reload Before Deployment:
 
 Always test your app in a production-like environment (without --reload) to ensure it behaves as expected.
+
+---
 
 ## License
 Meridian 59 is open-source. See `LICENSE` for details.
