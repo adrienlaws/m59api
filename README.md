@@ -143,7 +143,7 @@ Users can override the defaults by providing arguments when running the m59api c
 
 Use --reload only in development:
 
-It’s a great tool for speeding up development but should not be used in production.
+Itâ€™s a great tool for speeding up development but should not be used in production.
 Use Environment-Specific Configurations:
 
 Use environment variables or configuration files to differentiate between development and production environments.
