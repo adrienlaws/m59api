@@ -31,7 +31,7 @@ def main():
     args = parser.parse_args()
 
     uvicorn.run(
-        "main:app",
+        "m59api.main:app",
         host=args.host,
         port=args.port,
         reload=args.reload,

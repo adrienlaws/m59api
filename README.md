@@ -34,23 +34,37 @@ export DISCORD_WEBHOOK_URL=https://your-discord-webhook-url
 
 ## Running
 
-**From the command line (after pip install):**
-```sh
-m59api --host 127.0.0.1 --port 8000 --reload
+**Quick start with all defaults:**
+```
+m59api
+```
+This will run the API on `127.0.0.1:8000` with log level `info`.
+
+**Specify options (optional):**
+```
+m59api --host 0.0.0.0 --port 8000 --reload --log-level debug
 ```
 
 **Or with Uvicorn directly:**
-```sh
+```
 uvicorn m59api.main:app --reload
 ```
 
 **With Docker:**
-```sh
-docker run --rm -it \
-  -e DISCORD_WEBHOOK_URL=https://your-discord-webhook-url \
-  -p 5959:5959 -p 8000:8000 -p 9998:9998 \
-  m59-linux-test
 ```
+docker run --rm -it -e DISCORD_WEBHOOK_URL=https://your-discord-webhook-url -p 5959:5959 -p 8000:8000 -p 9998:9998 m59-linux-test
+```
+
+---
+
+## Configuration Options
+
+- `--host`: Host to bind to (default: `127.0.0.1`)
+- `--port`: Port to bind to (default: `8000`)
+- `--reload`: Enable auto-reload for development (default: off)
+- `--log-level`: Set log level (default: `info`)
+
+You can combine these options as needed, or just run `m59api` for the defaults.
 
 ---
 
