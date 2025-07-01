@@ -30,6 +30,10 @@ def main():
 
     args = parser.parse_args()
 
+    print(f"\nAdmin API docs: http://{args.host}:{args.port}/docs")
+    print(f"Example admin endpoint: http://{args.host}:{args.port}/api/v1/admin/status\n")
+
+
     uvicorn.run(
         "m59api.main:app",
         host=args.host,
