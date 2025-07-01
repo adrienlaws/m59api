@@ -7,8 +7,6 @@ import os
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
-if not DISCORD_WEBHOOK_URL:
-    raise ValueError("The environment variable DISCORD_WEBHOOK_URL is not set.")
 router = APIRouter()
 client = MaintenanceClient()
 
@@ -26,6 +24,10 @@ def check_access(response: str):
 
 @router.post("/admin/discord-webhook")
 async def send_to_discord_webhook(message: str):
+    import os
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        raise HTTPException(status_code=503, detail="DISCORD_WEBHOOK_URL is not set on the server.")
     """
     Send a message to a Discord webhook.
 
