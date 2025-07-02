@@ -2832,8 +2832,20 @@ def pipe_server_windows(pipe_name):
                         if '|' in msg:
                             ts, content = msg.split('|', 1)
                             print(f"[{ts}] {content}")
+                            try:
+                                loop = asyncio.get_event_loop()
+                            except RuntimeError:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                            asyncio.run_coroutine_threadsafe(send_to_webhook(content), loop)
                         else:
                             print(f"Received from pipe ({pipe_name}): {msg}")
+                            try:
+                                loop = asyncio.get_event_loop()
+                            except RuntimeError:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                            asyncio.run_coroutine_threadsafe(send_to_webhook(msg), loop)
                     except pywintypes.error as e:
                         if hasattr(e, 'winerror') and e.winerror == 109:
                             print(f"Client disconnected (broken pipe) ({pipe_name}).")
@@ -2882,8 +2894,10 @@ async def pipe_listener_linux():
                         if '|' in msg:
                             ts, content = msg.split('|', 1)
                             print(f"[{ts}] {content}")
+                            await send_to_webhook(content)
                         else:
                             print(f"Received from pipe: {msg}")
+                            await send_to_webhook(msg)
                     else:
                         await asyncio.sleep(0.1)
         except Exception as e:
@@ -2905,3 +2919,16 @@ async def startup_event():
     else:
         print(f"Pipe listener not started: unsupported OS {system}")
     _pipe_server_started = True
+
+async def send_to_webhook(message: str):
+    webhook_url = RUNTIME_DISCORD_WEBHOOK_URL or os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        print("No webhook URL set.")
+        return
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(webhook_url, json={"content": message})
+            if resp.status_code not in (200, 204):
+                print(f"Discord webhook error: {resp.status_code} {resp.text}")
+        except Exception as e:
+            print(f"Error sending to webhook: {e}")
