@@ -2728,37 +2728,26 @@ else:
 def pipe_server_windows():
     import win32pipe, win32file, pywintypes
     import time
+
     pipe_name = r'\\.\pipe\m59apiwebhook'
+
     while True:
-        pipe = None
         try:
-            try:
-                pipe = win32pipe.CreateNamedPipe(
-                    pipe_name,
-                    win32pipe.PIPE_ACCESS_INBOUND,
-                    win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
-                    1, 65536, 65536,
-                    0,
-                    None
-                )
-                print("Creating named pipe server...")
-            except pywintypes.error as e:
-                print(f"CreateNamedPipe error: {e}")
-                time.sleep(2)
-                continue
+            print("Creating named pipe...")
+            pipe = win32pipe.CreateNamedPipe(
+                pipe_name,
+                win32pipe.PIPE_ACCESS_INBOUND,
+                win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
+                1, 65536, 65536,
+                0,
+                None
+            )
+
             print("Waiting for client to connect...")
             try:
-                try:
-                    win32pipe.ConnectNamedPipe(pipe, None)
-                    print("Client connected!")
-                except pywintypes.error as e:
-                    # ERROR_PIPE_CONNECTED (535): client connected between CreateNamedPipe and ConnectNamedPipe
-                    if hasattr(e, 'winerror') and e.winerror == 535:
-                        print("Client already connected (ERROR_PIPE_CONNECTED). Proceeding.")
-                    else:
-                        print(f"ConnectNamedPipe error: {e}")
-                        raise
-                # Only reach here if client is connected
+                win32pipe.ConnectNamedPipe(pipe, None)
+                print("Client connected!")
+
                 while True:
                     try:
                         result, data = win32file.ReadFile(pipe, 4096)
@@ -2770,26 +2759,28 @@ def pipe_server_windows():
                         if hasattr(e, 'winerror') and e.winerror == 109:
                             print("Client disconnected (broken pipe).")
                         else:
-                            print(f"Pipe read error: {e}")
+                            print(f"ReadFile error: {e}")
                         break
-            except Exception as e:
-                print(f"Unexpected error during ConnectNamedPipe or read: {e}")
-                time.sleep(2)
+
+            except pywintypes.error as e:
+                if hasattr(e, 'winerror') and e.winerror == 535:
+                    print("Client already connected (ERROR_PIPE_CONNECTED). Proceeding.")
+                else:
+                    print(f"ConnectNamedPipe error: {e}")
+
         except pywintypes.error as e:
-            print(f"Pipe server error: {e}")
-            time.sleep(2)
+            print(f"CreateNamedPipe error: {e}")
         except Exception as e:
-            print(f"Unexpected error in Windows pipe server: {e}")
-            time.sleep(2)
+            print(f"Unexpected error: {e}")
         finally:
-            if pipe is not None:
-                try:
-                    win32file.CloseHandle(pipe)
-                    print("Closed pipe handle.")
-                except Exception as close_err:
-                    print(f"Error closing pipe handle: {close_err}")
-            # Always wait a bit before next loop to let Windows release the pipe
-            time.sleep(1)
+            try:
+                win32file.CloseHandle(pipe)
+                print("Closed pipe handle.")
+            except Exception as e:
+                print(f"Error closing pipe: {e}")
+
+        # Delay before re-creating pipe (optional safety delay)
+        time.sleep(1)
 
 # Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
