@@ -42,20 +42,53 @@ def save_webhook_url(url):
 
 # No file load on startup
 
+
+@router.post("/create-automated")
+async def create_automated(username: str, password: str, email: str = ""):
+    """
+    Create a user account using the 'create automated' command.
+    Args:
+        username (str): The username for the new account.
+        password (str): The password for the new account.
+        email (str, optional): The email address for the new account (can be blank).
+    Returns:
+        JSON response indicating success or failure.
+    """
+    try:
+        # Compose the command, include email only if provided
+        if email:
+            command = f"create automated {username} {password} {email}"
+        else:
+            command = f"create automated {username} {password}"
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, client.send_command, command
+        )
+        print("Raw response:", repr(response))
+        # Accept as success if 'Created account' is in the response
+        if "Created account" in response:
+            return {"status": "success", "response": response.strip()}
+        if "Unknown command" in response or "create automated" not in response:
+            raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
+        # Fallback: treat as error if not recognized
+        raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/admin/set-webhook-endpoint")
-async def set_webhook_endpoint(url: str = Body(...)):
+async def set_webhook_endpoint(webhook_url: str):
     """
     Set the webhook endpoint URL at runtime.
 
     Args:
-        url (str): The webhook endpoint URL to set.
+        webhook_url (str): The webhook endpoint URL to set.
 
     Returns:
         JSON response indicating success and the new webhook URL.
     """
     global RUNTIME_DISCORD_WEBHOOK_URL
-    RUNTIME_DISCORD_WEBHOOK_URL = url
-    return {"status": "success", "webhook_url": url}
+    RUNTIME_DISCORD_WEBHOOK_URL = webhook_url
+    return {"status": "success", "webhook_url": webhook_url}
 
 @router.post("/admin/discord-webhook")
 async def send_to_discord_webhook(message: str):
@@ -2746,63 +2779,6 @@ async def admin_say(message: str):
             "raw_response": response.strip(),
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post(
-    "/admin/admincreatedautomated",
-    summary="Create a new user account (admincreatedautomated)",
-    tags=["admin"]
-)
-async def admin_created_automated(
-    username: str = Body(..., embed=True),
-    password: str = Body(..., embed=True),
-    email: str = Body(..., embed=True),
-):
-    """
-    Create a new user account using the admincreatedautomated command.
-    """
-    try:
-        command = f'admincreatedautomated {username} {password} {email}'
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, client.send_command, command
-        )
-        check_access(response)
-        if "created account" in response.lower():
-            return {"status": "success", "response": response}
-        else:
-            raise HTTPException(status_code=400, detail=f"Account creation failed: {response}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/create-automated")
-async def create_automated(username: str, password: str, email: str = ""):
-    """
-    Create a user account using the 'create automated' command.
-    Args:
-        username (str): The username for the new account.
-        password (str): The password for the new account.
-        email (str, optional): The email address for the new account (can be blank).
-    Returns:
-        JSON response indicating success or failure.
-    """
-    try:
-        # Compose the command, include email only if provided
-        if email:
-            command = f"create automated {username} {password} {email}"
-        else:
-            command = f"create automated {username} {password}"
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, client.send_command, command
-        )
-        print("Raw response:", repr(response))
-        if "Unknown command" in response or "create automated" not in response:
-            raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
-        if "Account created" not in response:
-            raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
-        return {"status": "success", "response": response.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
