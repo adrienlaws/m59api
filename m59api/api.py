@@ -42,8 +42,17 @@ def save_webhook_url(url):
 
 # No file load on startup
 
-@router.post("/admin/set-discord-webhook")
-async def set_discord_webhook(url: str = Body(..., embed=True)):
+@router.post("/admin/set-webhook-endpoint")
+async def set_webhook_endpoint(url: str = Body(...)):
+    """
+    Set the webhook endpoint URL at runtime.
+
+    Args:
+        url (str): The webhook endpoint URL to set.
+
+    Returns:
+        JSON response indicating success and the new webhook URL.
+    """
     global RUNTIME_DISCORD_WEBHOOK_URL
     RUNTIME_DISCORD_WEBHOOK_URL = url
     return {"status": "success", "webhook_url": url}
@@ -2764,6 +2773,36 @@ async def admin_created_automated(
             return {"status": "success", "response": response}
         else:
             raise HTTPException(status_code=400, detail=f"Account creation failed: {response}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-automated")
+async def create_automated(username: str, password: str, email: str = ""):
+    """
+    Create a user account using the 'create automated' command.
+    Args:
+        username (str): The username for the new account.
+        password (str): The password for the new account.
+        email (str, optional): The email address for the new account (can be blank).
+    Returns:
+        JSON response indicating success or failure.
+    """
+    try:
+        # Compose the command, include email only if provided
+        if email:
+            command = f"create automated {username} {password} {email}"
+        else:
+            command = f"create automated {username} {password}"
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, client.send_command, command
+        )
+        print("Raw response:", repr(response))
+        if "Unknown command" in response or "create automated" not in response:
+            raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
+        if "Account created" not in response:
+            raise HTTPException(status_code=400, detail=f"Account creation failed: {response.strip()}")
+        return {"status": "success", "response": response.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
