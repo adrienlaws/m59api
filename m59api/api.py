@@ -2732,15 +2732,20 @@ def pipe_server_windows():
     while True:
         pipe = None
         try:
-            print("Creating named pipe server...")
-            pipe = win32pipe.CreateNamedPipe(
-                pipe_name,
-                win32pipe.PIPE_ACCESS_INBOUND,
-                win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
-                1, 65536, 65536,
-                0,
-                None
-            )
+            try:
+                pipe = win32pipe.CreateNamedPipe(
+                    pipe_name,
+                    win32pipe.PIPE_ACCESS_INBOUND,
+                    win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
+                    1, 65536, 65536,
+                    0,
+                    None
+                )
+                print("Creating named pipe server...")
+            except pywintypes.error as e:
+                print(f"CreateNamedPipe error: {e}")
+                time.sleep(2)
+                continue
             print("Waiting for client to connect...")
             try:
                 try:
@@ -2783,6 +2788,8 @@ def pipe_server_windows():
                     print("Closed pipe handle.")
                 except Exception as close_err:
                     print(f"Error closing pipe handle: {close_err}")
+            # Always wait a bit before next loop to let Windows release the pipe
+            time.sleep(1)
 
 # Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
