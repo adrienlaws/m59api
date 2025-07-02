@@ -2729,6 +2729,7 @@ def pipe_server_windows():
     import win32pipe, win32file, pywintypes
     pipe_name = r'\\.\pipe\m59apiwebhook'
     while True:
+        pipe = None
         try:
             print("Creating named pipe server...")
             pipe = win32pipe.CreateNamedPipe(
@@ -2743,15 +2744,32 @@ def pipe_server_windows():
             win32pipe.ConnectNamedPipe(pipe, None)
             print("Client connected!")
             while True:
-                result, data = win32file.ReadFile(pipe, 4096)
-                if data:
+                try:
+                    result, data = win32file.ReadFile(pipe, 4096)
+                    if not data:
+                        print("Client disconnected.")
+                        break  # Exit read loop to close pipe and wait for new client
                     print(f"Received from pipe: {data.decode(errors='replace').strip()}")
+                except pywintypes.error as e:
+                    # ERROR_BROKEN_PIPE (109) means client disconnected
+                    if hasattr(e, 'winerror') and e.winerror == 109:
+                        print("Client disconnected (broken pipe).")
+                    else:
+                        print(f"Pipe read error: {e}")
+                    break  # Exit read loop
         except pywintypes.error as e:
             print(f"Pipe server error: {e}")
             import time; time.sleep(1)
         except Exception as e:
             print(f"Unexpected error in Windows pipe server: {e}")
             import time; time.sleep(1)
+        finally:
+            if pipe is not None:
+                try:
+                    win32file.CloseHandle(pipe)
+                    print("Closed pipe handle.")
+                except Exception as close_err:
+                    print(f"Error closing pipe handle: {close_err}")
 
 # Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
