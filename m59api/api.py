@@ -3,6 +3,8 @@ from m59api.maintenance import MaintenanceClient
 from m59api.config import DISCORD_WEBHOOK_URL
 import asyncio, re, httpx
 import os
+import sys
+import platform
 
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -2714,3 +2716,55 @@ async def admin_say(message: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Pipe path for cross-platform support
+if platform.system() == "Windows":
+    PIPE_PATH = r'\\.\pipe\m59apiwebhook'
+else:
+    PIPE_PATH = '/tmp/m59apiwebhook'
+
+@router.on_event("startup")
+async def startup_event():
+    if platform.system() != "Windows":
+        # On Linux, ensure the FIFO exists
+        if not os.path.exists(PIPE_PATH):
+            os.mkfifo(PIPE_PATH)
+    asyncio.create_task(pipe_listener())
+
+async def pipe_listener():
+    if platform.system() == "Windows":
+        try:
+            import win32file, pywintypes
+        except ImportError:
+            print("pywin32 is required for Windows named pipe support. Please install it with 'pip install pywin32'.")
+            return
+        while True:
+            try:
+                handle = win32file.CreateFile(
+                    PIPE_PATH,
+                    win32file.GENERIC_READ,
+                    0, None,
+                    win32file.OPEN_EXISTING,
+                    0, None
+                )
+                while True:
+                    hr, data = win32file.ReadFile(handle, 4096)
+                    if data:
+                        print(f"Received from pipe: {data.decode(errors='replace').strip()}")
+            except pywintypes.error as e:
+                print(f"Pipe listener error (Windows): {e}")
+                await asyncio.sleep(1)
+    else:
+        while True:
+            try:
+                with open(PIPE_PATH, "r") as fifo:
+                    while True:
+                        line = fifo.readline()
+                        if line:
+                            print(f"Received from pipe: {line.strip()}")
+                        else:
+                            await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"Pipe listener error (Linux): {e}")
+                await asyncio.sleep(1)

@@ -75,6 +75,29 @@ You can combine these options as needed, or just run `m59api` for the defaults.
 
 ---
 
+## Listening for Pushes from Meridian 59
+
+In addition to querying the Meridian 59 server via the maintenance port, `m59api` can also listen for push messages sent from the server or other processes via a named pipe (on Windows) or a FIFO (on Linux).
+
+- **On Linux:** Listens on `/tmp/m59apiwebhook` (FIFO)
+- **On Windows:** Listens on `\\.\pipe\m59apiwebhook` (named pipe)
+
+Any message written to this pipe will be received and printed by the API service. This allows the game server or other tools to push notifications or events to the API in real time.
+
+> **Note:** On Windows, you must install `pywin32` for named pipe support:
+> ```sh
+> pip install pywin32
+> ```
+
+---
+
+## How it Works
+
+- **Querying:** Most API endpoints connect to the Meridian 59 maintenance port and issue commands to retrieve or modify server state.
+- **Pushes:** The API also listens for messages sent to the OS pipe, allowing for real-time event pushes from the server or other processes.
+
+---
+
 ## Disclaimer
 
 This project is an independent, community-created tool for managing Meridian 59 servers.  
