@@ -3,9 +3,10 @@ from m59api.maintenance import MaintenanceClient
 from m59api.config import DISCORD_WEBHOOK_URL
 import asyncio, re, httpx
 import os
-import sys
 import platform
 import threading
+import asyncio
+import time
 
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -2721,99 +2722,120 @@ async def admin_say(message: str):
 
 # Pipe path for cross-platform support
 if platform.system() == "Windows":
-    PIPE_PATH = r'\\.\pipe\m59apiwebhook'
+    PIPE_PATHS = [fr'\\.\pipe\m59apiwebhook{i}' for i in range(1, 11)]
 else:
-    PIPE_PATH = '/tmp/m59apiwebhook'
+    PIPE_PATHS = [f'/tmp/m59apiwebhook1']  # Can extend to multiple if needed
 
-def pipe_server_windows():
+_pipe_server_started = False
+
+def pipe_server_windows(pipe_name):
     import win32pipe, win32file, pywintypes
-    import time
-
-    pipe_name = r'\\.\pipe\m59apiwebhook'
-
     while True:
-        print("Creating named pipe...")
+        pipe = None
         try:
-            pipe = win32pipe.CreateNamedPipe(
-                pipe_name,
-                win32pipe.PIPE_ACCESS_INBOUND,
-                win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
-                1, 65536, 65536,
-                0,
-                None
-            )
-        except pywintypes.error as e:
-            print(f"CreateNamedPipe error: {e}")
-            time.sleep(1)
-            continue
-
-        print("Waiting for client to connect...")
-        try:
-            win32pipe.ConnectNamedPipe(pipe, None)
-            print("Client connected!")
-
-            while True:
+            try:
+                pipe = win32pipe.CreateNamedPipe(
+                    pipe_name,
+                    win32pipe.PIPE_ACCESS_INBOUND,
+                    win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
+                    1, 65536, 65536,
+                    0,
+                    None
+                )
+                print(f"Creating named pipe server: {pipe_name}")
+            except pywintypes.error as e:
+                print(f"CreateNamedPipe error on {pipe_name}: {e}")
+                time.sleep(2)
+                continue
+            print(f"Waiting for client to connect on {pipe_name}...")
+            try:
                 try:
-                    result, data = win32file.ReadFile(pipe, 4096)
-                    if not data:
-                        print("Client disconnected.")
-                        break
-                    print(f"Received from pipe: {data.decode(errors='replace').strip()}")
+                    win32pipe.ConnectNamedPipe(pipe, None)
+                    print(f"Client connected! ({pipe_name})")
                 except pywintypes.error as e:
-                    if hasattr(e, 'winerror') and e.winerror == 109:
-                        print("Client disconnected (broken pipe).")
+                    if hasattr(e, 'winerror') and e.winerror == 535:
+                        print(f"Client already connected (ERROR_PIPE_CONNECTED) on {pipe_name}. Proceeding.")
                     else:
-                        print(f"ReadFile error: {e}")
-                    break
-
+                        print(f"ConnectNamedPipe error on {pipe_name}: {e}")
+                        raise
+                while True:
+                    try:
+                        result, data = win32file.ReadFile(pipe, 4096)
+                        if not data:
+                            print(f"Client disconnected. ({pipe_name})")
+                            break
+                        msg = data.decode(errors='replace').strip()
+                        # Parse timestamp|message
+                        if '|' in msg:
+                            ts, content = msg.split('|', 1)
+                            print(f"[{ts}] {content}")
+                        else:
+                            print(f"Received from pipe ({pipe_name}): {msg}")
+                    except pywintypes.error as e:
+                        if hasattr(e, 'winerror') and e.winerror == 109:
+                            print(f"Client disconnected (broken pipe) ({pipe_name}).")
+                        else:
+                            print(f"Pipe read error on {pipe_name}: {e}")
+                        break
+            except Exception as e:
+                print(f"Unexpected error during ConnectNamedPipe or read on {pipe_name}: {e}")
+                time.sleep(2)
         except pywintypes.error as e:
-            if hasattr(e, 'winerror') and e.winerror == 535:
-                print("Client already connected (ERROR_PIPE_CONNECTED). Proceeding.")
-            else:
-                print(f"ConnectNamedPipe error: {e}")
+            print(f"Pipe server error on {pipe_name}: {e}")
+            time.sleep(2)
         except Exception as e:
-            print(f"Unexpected error: {e}")
+            print(f"Unexpected error in Windows pipe server ({pipe_name}): {e}")
+            time.sleep(2)
         finally:
-            try:
-                win32file.CloseHandle(pipe)
-                print("Closed pipe handle.")
-            except Exception as e:
-                print(f"Error closing pipe: {e}")
-
-        # Give system time to clean up
-        time.sleep(1)
-
-
-# Patch startup_event to use pipe_server_windows in a thread
-@router.on_event("startup")
-async def startup_event():
-    system = platform.system()
-    if system == "Windows":
-        # Run the blocking pipe server in a background thread
-        threading.Thread(target=pipe_server_windows, daemon=True).start()
-    elif system == "Linux":
-        if not os.path.exists(PIPE_PATH):
-            try:
-                os.mkfifo(PIPE_PATH)
-            except FileExistsError:
-                pass
-            except Exception as e:
-                print(f"Error creating FIFO: {e}")
-                return
-        asyncio.create_task(pipe_listener_linux())
-    else:
-        print(f"Pipe listener not started: unsupported OS {system}")
+            if pipe is not None:
+                try:
+                    win32file.CloseHandle(pipe)
+                    print(f"Closed pipe handle: {pipe_name}")
+                except Exception as close_err:
+                    print(f"Error closing pipe handle {pipe_name}: {close_err}")
+            time.sleep(1)
 
 async def pipe_listener_linux():
     while True:
         try:
-            with open(PIPE_PATH, "r") as fifo:
+            path = PIPE_PATHS[0]
+            if not os.path.exists(path):
+                try:
+                    os.mkfifo(path)
+                except FileExistsError:
+                    pass
+                except Exception as e:
+                    print(f"Error creating FIFO: {e}")
+                    await asyncio.sleep(1)
+                    continue
+            with open(path, "r") as fifo:
                 while True:
                     line = fifo.readline()
                     if line:
-                        print(f"Received from pipe: {line.strip()}")
+                        msg = line.strip()
+                        if '|' in msg:
+                            ts, content = msg.split('|', 1)
+                            print(f"[{ts}] {content}")
+                        else:
+                            print(f"Received from pipe: {msg}")
                     else:
                         await asyncio.sleep(0.1)
         except Exception as e:
             print(f"Pipe listener error (Linux): {e}")
             await asyncio.sleep(1)
+
+# Patch startup_event to use multiple pipe servers
+@router.on_event("startup")
+async def startup_event():
+    global _pipe_server_started
+    if _pipe_server_started:
+        return
+    system = platform.system()
+    if system == "Windows":
+        for pipe_name in PIPE_PATHS:
+            threading.Thread(target=pipe_server_windows, args=(pipe_name,), daemon=True).start()
+    elif system == "Linux":
+        asyncio.create_task(pipe_listener_linux())
+    else:
+        print(f"Pipe listener not started: unsupported OS {system}")
+    _pipe_server_started = True
