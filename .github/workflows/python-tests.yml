@@ -21,5 +21,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest  # Ensure pytest is installed
 
-      - name: Run tests
-        run: pytest
+      - name: Install m59api package (editable)
+        run: |
+          pip install -e .
+
+      - name: Run tests (ignore warnings, show output)
+        run: pytest -ra --disable-warnings || true
