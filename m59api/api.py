@@ -2724,51 +2724,52 @@ if platform.system() == "Windows":
 else:
     PIPE_PATH = '/tmp/m59apiwebhook'
 
+async def pipe_server_windows():
+    import win32pipe, win32file, pywintypes
+    pipe_name = r'\\.\pipe\m59apiwebhook'
+    while True:
+        try:
+            print("Creating named pipe server...")
+            pipe = win32pipe.CreateNamedPipe(
+                pipe_name,
+                win32pipe.PIPE_ACCESS_INBOUND,
+                win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_WAIT,
+                1, 65536, 65536,
+                0,
+                None
+            )
+            print("Waiting for client to connect...")
+            win32pipe.ConnectNamedPipe(pipe, None)
+            print("Client connected!")
+            while True:
+                result, data = win32file.ReadFile(pipe, 4096)
+                if data:
+                    print(f"Received from pipe: {data.decode(errors='replace').strip()}")
+        except pywintypes.error as e:
+            print(f"Pipe server error: {e}")
+            await asyncio.sleep(1)
+        except Exception as e:
+            print(f"Unexpected error in Windows pipe server: {e}")
+            await asyncio.sleep(1)
+
+# Patch startup_event to use pipe_server_windows
 @router.on_event("startup")
 async def startup_event():
     system = platform.system()
     if system == "Windows":
-        # Only start Windows pipe listener on Windows
-        asyncio.create_task(pipe_listener_windows())
+        asyncio.create_task(pipe_server_windows())
     elif system == "Linux":
-        # Only start Linux FIFO listener on Linux
         if not os.path.exists(PIPE_PATH):
             try:
                 os.mkfifo(PIPE_PATH)
             except FileExistsError:
-                pass  # Race condition, already exists
+                pass
             except Exception as e:
                 print(f"Error creating FIFO: {e}")
                 return
         asyncio.create_task(pipe_listener_linux())
     else:
         print(f"Pipe listener not started: unsupported OS {system}")
-
-async def pipe_listener_windows():
-    try:
-        import win32file, pywintypes
-    except ImportError:
-        print("pywin32 is required for Windows named pipe support. Please install it with 'pip install pywin32'.")
-        return
-    while True:
-        try:
-            handle = win32file.CreateFile(
-                PIPE_PATH,
-                win32file.GENERIC_READ,
-                0, None,
-                win32file.OPEN_EXISTING,
-                0, None
-            )
-            while True:
-                hr, data = win32file.ReadFile(handle, 4096)
-                if data:
-                    print(f"Received from pipe: {data.decode(errors='replace').strip()}")
-        except pywintypes.error as e:
-            print(f"Pipe listener error (Windows): {e}")
-            await asyncio.sleep(1)
-        except Exception as e:
-            print(f"Unexpected error in Windows pipe listener: {e}")
-            await asyncio.sleep(1)
 
 async def pipe_listener_linux():
     while True:
