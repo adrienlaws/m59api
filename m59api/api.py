@@ -5,6 +5,7 @@ import asyncio, re, httpx
 import os
 import sys
 import platform
+import threading
 
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -2747,17 +2748,18 @@ async def pipe_server_windows():
                     print(f"Received from pipe: {data.decode(errors='replace').strip()}")
         except pywintypes.error as e:
             print(f"Pipe server error: {e}")
-            await asyncio.sleep(1)
+            import time; time.sleep(1)
         except Exception as e:
             print(f"Unexpected error in Windows pipe server: {e}")
-            await asyncio.sleep(1)
+            import time; time.sleep(1)
 
-# Patch startup_event to use pipe_server_windows
+# Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
 async def startup_event():
     system = platform.system()
     if system == "Windows":
-        asyncio.create_task(pipe_server_windows())
+        # Run the blocking pipe server in a background thread
+        threading.Thread(target=pipe_server_windows, daemon=True).start()
     elif system == "Linux":
         if not os.path.exists(PIPE_PATH):
             try:
