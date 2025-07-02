@@ -2732,6 +2732,7 @@ def pipe_server_windows():
     pipe_name = r'\\.\pipe\m59apiwebhook'
 
     while True:
+        pipe = None  # Always define it before the try block
         try:
             print("Creating named pipe...")
             pipe = win32pipe.CreateNamedPipe(
@@ -2773,14 +2774,12 @@ def pipe_server_windows():
         except Exception as e:
             print(f"Unexpected error: {e}")
         finally:
-            try:
+            if pipe:
+                try:
                 win32file.CloseHandle(pipe)
                 print("Closed pipe handle.")
             except Exception as e:
                 print(f"Error closing pipe: {e}")
-
-        # Delay before re-creating pipe (optional safety delay)
-        time.sleep(1)
 
 # Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
