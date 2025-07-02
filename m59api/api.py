@@ -7,6 +7,10 @@ import platform
 import threading
 import asyncio
 import time
+import json
+from fastapi import Body
+from pydantic import BaseModel, EmailStr
+from fastapi import status
 
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -26,10 +30,28 @@ def check_access(response: str):
         )
 
 
+# In-memory Discord webhook config (no persistence)
+RUNTIME_DISCORD_WEBHOOK_URL = None
+
+def load_webhook_url():
+    # No-op: kept for compatibility if called elsewhere
+    pass
+
+def save_webhook_url(url):
+    # No-op: kept for compatibility if called elsewhere
+    pass
+
+# No file load on startup
+
+@router.post("/admin/set-discord-webhook")
+async def set_discord_webhook(url: str = Body(..., embed=True)):
+    global RUNTIME_DISCORD_WEBHOOK_URL
+    RUNTIME_DISCORD_WEBHOOK_URL = url
+    return {"status": "success", "webhook_url": url}
+
 @router.post("/admin/discord-webhook")
 async def send_to_discord_webhook(message: str):
-    import os
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL") or RUNTIME_DISCORD_WEBHOOK_URL
     if not webhook_url:
         raise HTTPException(status_code=503, detail="DISCORD_WEBHOOK_URL is not set on the server.")
     """
@@ -47,7 +69,7 @@ async def send_to_discord_webhook(message: str):
 
         # Send the POST request to the Discord webhook
         async with httpx.AsyncClient() as client:
-            response = await client.post(DISCORD_WEBHOOK_URL, json=payload)
+            response = await client.post(webhook_url, json=payload)
 
         # Check if the request was successful
         if response.status_code != 204:  # Discord returns 204 No Content on success
@@ -2716,6 +2738,37 @@ async def admin_say(message: str):
             "raw_response": response.strip(),
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AutomatedAccountCreateRequest(BaseModel):
+    username: str
+    password: str
+    email: EmailStr
+    # Add more fields if needed by the admincreatedautomated command
+
+@router.post(
+    "/admin/admincreatedautomated",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new user account (admincreatedautomated)",
+    tags=["admin"]
+)
+async def admin_created_automated(request: AutomatedAccountCreateRequest):
+    """
+    Create a new user account using the admincreatedautomated command.
+    """
+    try:
+        # Construct the command string. Adjust as needed for your server's syntax.
+        command = f'admincreatedautomated {request.username} {request.password} {request.email}'
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, client.send_command, command
+        )
+        check_access(response)
+        if "created account" in response.lower():
+            return {"status": "success", "response": response}
+        else:
+            raise HTTPException(status_code=400, detail=f"Account creation failed: {response}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
