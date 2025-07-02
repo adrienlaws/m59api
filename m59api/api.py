@@ -2725,7 +2725,7 @@ if platform.system() == "Windows":
 else:
     PIPE_PATH = '/tmp/m59apiwebhook'
 
-async def pipe_server_windows():
+def pipe_server_windows():
     import win32pipe, win32file, pywintypes
     pipe_name = r'\\.\pipe\m59apiwebhook'
     while True:
