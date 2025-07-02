@@ -2776,10 +2776,10 @@ def pipe_server_windows():
         finally:
             if pipe:
                 try:
-                win32file.CloseHandle(pipe)
-                print("Closed pipe handle.")
-            except Exception as e:
-                print(f"Error closing pipe: {e}")
+                    win32file.CloseHandle(pipe)
+                    print("Closed pipe handle.")
+                except Exception as e:
+                    print(f"Error closing pipe: {e}")
 
 # Patch startup_event to use pipe_server_windows in a thread
 @router.on_event("startup")
