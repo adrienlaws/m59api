@@ -2859,21 +2859,24 @@ def pipe_server_windows(pipe_name):
             time.sleep(1)
 
 async def pipe_listener_linux():
+    path = PIPE_PATHS[0]
+    if not os.path.exists(path):
+        try:
+            os.mkfifo(path)
+        except FileExistsError:
+            pass
+        except Exception as e:
+            print(f"Error creating FIFO: {e}")
+            await asyncio.sleep(1)
+            return
+
+    loop = asyncio.get_running_loop()
     while True:
         try:
-            path = PIPE_PATHS[0]
-            if not os.path.exists(path):
-                try:
-                    os.mkfifo(path)
-                except FileExistsError:
-                    pass
-                except Exception as e:
-                    print(f"Error creating FIFO: {e}")
-                    await asyncio.sleep(1)
-                    continue
-            with open(path, "r") as fifo:
+            # Open the FIFO in a thread to avoid blocking the event loop
+            with await loop.run_in_executor(None, lambda: open(path, "r")) as fifo:
                 while True:
-                    line = fifo.readline()
+                    line = await loop.run_in_executor(None, fifo.readline)
                     if line:
                         msg = line.strip()
                         if '|' in msg:
