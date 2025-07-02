@@ -9,7 +9,6 @@ import asyncio
 import time
 import json
 from fastapi import Body
-from pydantic import BaseModel, EmailStr
 from fastapi import status
 
 # Load the Discord webhook URL from the environment variable
@@ -2742,25 +2741,21 @@ async def admin_say(message: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class AutomatedAccountCreateRequest(BaseModel):
-    username: str
-    password: str
-    email: EmailStr
-    # Add more fields if needed by the admincreatedautomated command
-
 @router.post(
     "/admin/admincreatedautomated",
-    status_code=status.HTTP_201_CREATED,
     summary="Create a new user account (admincreatedautomated)",
     tags=["admin"]
 )
-async def admin_created_automated(request: AutomatedAccountCreateRequest):
+async def admin_created_automated(
+    username: str = Body(..., embed=True),
+    password: str = Body(..., embed=True),
+    email: str = Body(..., embed=True),
+):
     """
     Create a new user account using the admincreatedautomated command.
     """
     try:
-        # Construct the command string. Adjust as needed for your server's syntax.
-        command = f'admincreatedautomated {request.username} {request.password} {request.email}'
+        command = f'admincreatedautomated {username} {password} {email}'
         response = await asyncio.get_event_loop().run_in_executor(
             None, client.send_command, command
         )
