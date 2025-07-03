@@ -2828,7 +2828,7 @@ def pipe_server_windows(pipe_name):
                         if not data:
                             print(f"Client disconnected. ({pipe_name})")
                             break
-                        msg = data.decode(errors='replace').strip():
+                        msg = data.decode(errors='replace').strip()
                         print(f"Received from pipe ({pipe_name}): {msg}")
                         try:
                             loop = asyncio.get_event_loop()
