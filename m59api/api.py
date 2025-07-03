@@ -2828,25 +2828,14 @@ def pipe_server_windows(pipe_name):
                         if not data:
                             print(f"Client disconnected. ({pipe_name})")
                             break
-                        msg = data.decode(errors='replace').strip()
-                        # Parse timestamp|message
-                        if '|' in msg:
-                            ts, content = msg.split('|', 1)
-                            print(f"[{ts}] {content}")
-                            try:
-                                loop = asyncio.get_event_loop()
-                            except RuntimeError:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                            asyncio.run_coroutine_threadsafe(send_to_webhook(content), loop)
-                        else:
-                            print(f"Received from pipe ({pipe_name}): {msg}")
-                            try:
-                                loop = asyncio.get_event_loop()
-                            except RuntimeError:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                            asyncio.run_coroutine_threadsafe(send_to_webhook(msg), loop)
+                        msg = data.decode(errors='replace').strip():
+                        print(f"Received from pipe ({pipe_name}): {msg}")
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                        asyncio.run_coroutine_threadsafe(send_to_webhook(msg), loop)
                     except pywintypes.error as e:
                         if hasattr(e, 'winerror') and e.winerror == 109:
                             print(f"Client disconnected (broken pipe) ({pipe_name}).")
@@ -2892,13 +2881,8 @@ async def pipe_listener_linux():
                     line = await loop.run_in_executor(None, fifo.readline)
                     if line:
                         msg = line.strip()
-                        if '|' in msg:
-                            ts, content = msg.split('|', 1)
-                            print(f"[{ts}] {content}")
-                            await send_to_webhook(content)
-                        else:
-                            print(f"Received from pipe: {msg}")
-                            await send_to_webhook(msg)
+                        print(f"Received from pipe: {msg}")
+                        await send_to_webhook(msg)
                     else:
                         await asyncio.sleep(0.1)
         except Exception as e:
