@@ -1,15 +1,16 @@
-from fastapi import APIRouter, HTTPException
-from m59api.maintenance import MaintenanceClient
-from m59api.config import DISCORD_WEBHOOK_URL
-import asyncio, re, httpx
 import os
+import re
+import time
+import json
 import platform
 import threading
 import asyncio
-import time
-import json
-from fastapi import Body
-from fastapi import status
+
+import httpx
+from fastapi import APIRouter, HTTPException, Body, status
+
+from m59api.maintenance import MaintenanceClient
+from m59api.config import DISCORD_WEBHOOK_URL
 
 # Load the Discord webhook URL from the environment variable
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -2920,14 +2921,26 @@ async def startup_event():
         print(f"Pipe listener not started: unsupported OS {system}")
     _pipe_server_started = True
 
+
 async def send_to_webhook(message: str):
     webhook_url = RUNTIME_DISCORD_WEBHOOK_URL or os.getenv("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("No webhook URL set.")
         return
+
+    # Try to parse as JSON and format for Discord if possible
+    formatted_message = message
+    try:
+        if message.strip().startswith("{") and message.strip().endswith("}"):
+            data = json.loads(message)
+            if "timestamp" in data and "message" in data:
+                formatted_message = f"<t:{data['timestamp']}:F> {data['message']}"
+    except Exception as e:
+        print(f"Error parsing message as JSON: {e}")
+
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.post(webhook_url, json={"content": message})
+            resp = await client.post(webhook_url, json={"content": formatted_message})
             if resp.status_code not in (200, 204):
                 print(f"Discord webhook error: {resp.status_code} {resp.text}")
         except Exception as e:
