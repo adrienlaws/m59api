@@ -18,6 +18,8 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 router = APIRouter()
 client = MaintenanceClient()
 
+MAIN_LOOP = None
+
 
 def check_access(response: str):
     """
@@ -2788,7 +2790,8 @@ async def admin_say(message: str):
 if platform.system() == "Windows":
     PIPE_PATHS = [fr'\\.\pipe\m59apiwebhook{i}' for i in range(1, 11)]
 else:
-    PIPE_PATHS = [f'/tmp/m59apiwebhook1']  # Can extend to multiple if needed
+    # Linux and macOS both support FIFO pipes - create multiple for multi-server support
+    PIPE_PATHS = [f'/tmp/m59apiwebhook{i}' for i in range(1, 11)]
 
 _pipe_server_started = False
 
@@ -2830,12 +2833,11 @@ def pipe_server_windows(pipe_name):
                             break
                         msg = data.decode(errors='replace').strip()
                         print(f"Received from pipe ({pipe_name}): {msg}")
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        asyncio.run_coroutine_threadsafe(send_to_webhook(msg), loop)
+                        global MAIN_LOOP
+                        if MAIN_LOOP is not None:
+                            asyncio.run_coroutine_threadsafe(send_to_webhook(msg), MAIN_LOOP)
+                        else:
+                            print("MAIN_LOOP is not set! Cannot send to webhook.")
                     except pywintypes.error as e:
                         if hasattr(e, 'winerror') and e.winerror == 109:
                             print(f"Client disconnected (broken pipe) ({pipe_name}).")
@@ -2860,15 +2862,15 @@ def pipe_server_windows(pipe_name):
                     print(f"Error closing pipe handle {pipe_name}: {close_err}")
             time.sleep(1)
 
-async def pipe_listener_linux():
-    path = PIPE_PATHS[0]
+async def pipe_listener_linux(path):
     if not os.path.exists(path):
         try:
             os.mkfifo(path)
+            print(f"Created FIFO: {path}")
         except FileExistsError:
             pass
         except Exception as e:
-            print(f"Error creating FIFO: {e}")
+            print(f"Error creating FIFO {path}: {e}")
             await asyncio.sleep(1)
             return
 
@@ -2877,30 +2879,33 @@ async def pipe_listener_linux():
         try:
             # Open the FIFO in a thread to avoid blocking the event loop
             with await loop.run_in_executor(None, lambda: open(path, "r")) as fifo:
+                print(f"FIFO listener started: {path}")
                 while True:
                     line = await loop.run_in_executor(None, fifo.readline)
                     if line:
                         msg = line.strip()
-                        print(f"Received from pipe: {msg}")
+                        print(f"Received from FIFO {path}: {msg}")
                         await send_to_webhook(msg)
                     else:
                         await asyncio.sleep(0.1)
         except Exception as e:
-            print(f"Pipe listener error (Linux): {e}")
+            print(f"FIFO listener error ({path}): {e}")
             await asyncio.sleep(1)
 
 # Patch startup_event to use multiple pipe servers
 @router.on_event("startup")
 async def startup_event():
-    global _pipe_server_started
+    global _pipe_server_started, MAIN_LOOP  # <-- add MAIN_LOOP here!
     if _pipe_server_started:
         return
     system = platform.system()
+    MAIN_LOOP = asyncio.get_running_loop()
     if system == "Windows":
         for pipe_name in PIPE_PATHS:
             threading.Thread(target=pipe_server_windows, args=(pipe_name,), daemon=True).start()
-    elif system == "Linux":
-        asyncio.create_task(pipe_listener_linux())
+    elif system in ["Linux", "Darwin"]:  # Darwin is macOS
+        for pipe_path in PIPE_PATHS:
+            asyncio.create_task(pipe_listener_linux(pipe_path))
     else:
         print(f"Pipe listener not started: unsupported OS {system}")
     _pipe_server_started = True
