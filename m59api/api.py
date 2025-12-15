@@ -2911,6 +2911,106 @@ async def startup_event():
     _pipe_server_started = True
 
 
+# Emoji mappings for different death message types
+# Using Discord emoji codes for compatibility
+DEATH_EMOJIS = {
+    "murdered in cold blood": ":skull_crossbones:",
+    "notorious murderer": ":crossed_swords:",
+    "feared outlaw": ":scales:",
+    "own folly": ":man_facepalming:",
+    "laid claim": ":castle:",
+    "lost a token": ":coin:",
+    "faction rival": ":shield:",
+    "guild combat": ":crossed_swords:",
+    "default": ":skull:"
+}
+
+def format_death_message(event_data: dict) -> str:
+    """
+    Format a death message with emojis by substituting params into rMessage template.
+    
+    The M59 server sends the rMessage as a resolved string resource with placeholders
+    like "%q", "%s", etc. We substitute the actual param values and add emojis.
+    
+    Example input:
+        {
+            "event": "UserKilled",
+            "params": {
+                "rMessage": "### %q was just killed by %s%q.",
+                "param1": "PlayerOne",
+                "param2": "a ",
+                "param3": "spider"
+            }
+        }
+    
+    Example output:
+        "?? PlayerOne was just killed by a spider."
+    
+    Args:
+        event_data: Dictionary with 'event', 'params' keys containing:
+            - rMessage: Template string with %q, %s placeholders (e.g., "### %q was just killed by %s%q.")
+            - param1-param7: Values to substitute into the template
+        
+    Returns:
+        Formatted message string with emojis, or None if not processable
+    """
+    if event_data.get("event") != "UserKilled":
+        return None
+    
+    params = event_data.get("params", {})
+    rmessage = params.get("rMessage")
+    
+    if not rmessage or not isinstance(rmessage, str):
+        return None
+    
+    # Start with the template message
+    formatted = rmessage
+    
+    # Substitute %q and %s placeholders with actual param values
+    # M59 uses: %q for names (quoted), %s for articles/text, %d for numbers
+    # param1, param2, param3, etc. are substituted in order
+    
+    # Build list of param values in order, including empty ones
+    param_values = []
+    for i in range(1, 8):
+        param_key = f"param{i}"
+        # Get param value, default to empty string if not present
+        value = params.get(param_key, "")
+        # Convert to string and strip whitespace
+        param_values.append(str(value).strip() if value else "")
+    
+    # Replace placeholders in order
+    # Note: M59's string format uses %q, %s, %d - we'll replace them sequentially
+    # Empty params get replaced with empty string (effectively removing them)
+    for value in param_values:
+        # Replace first occurrence of %q, %s, or %d (even if value is empty)
+        if "%q" in formatted:
+            formatted = formatted.replace("%q", value, 1)
+        elif "%s" in formatted:
+            formatted = formatted.replace("%s", value, 1)
+        elif "%d" in formatted:
+            formatted = formatted.replace("%d", value, 1)
+    
+    # Select appropriate emoji based on message content
+    emoji = DEATH_EMOJIS["default"]
+    for keyword, emoji_char in DEATH_EMOJIS.items():
+        if keyword != "default" and keyword in formatted.lower():
+            emoji = emoji_char
+            break
+    
+    # Replace ### prefix with emoji
+    if formatted.startswith("###"):
+        formatted = formatted.replace("###", emoji + " ", 1)
+    else:
+        # Add emoji if not already present
+        formatted = f"{emoji} {formatted}"
+    
+    # Clean up any double spaces caused by empty params
+    while "  " in formatted:
+        formatted = formatted.replace("  ", " ")
+    
+    return formatted.strip()
+
 async def send_to_webhook(message: str):
     webhook_url = RUNTIME_DISCORD_WEBHOOK_URL or os.getenv("DISCORD_WEBHOOK_URL")
     if not webhook_url:
@@ -2922,8 +3022,23 @@ async def send_to_webhook(message: str):
     try:
         if message.strip().startswith("{") and message.strip().endswith("}"):
             data = json.loads(message)
+            
+            # Handle legacy format with timestamp
             if "timestamp" in data and "message" in data:
                 formatted_message = f"<t:{data['timestamp']}:F> {data['message']}"
+            # Handle new structured event format
+            elif "event" in data and "params" in data:
+                # Try to format death messages with emojis
+                if data.get("event") == "UserKilled":
+                    death_msg = format_death_message(data)
+                    if death_msg:
+                        formatted_message = death_msg
+                    else:
+                        # Fallback: show raw event data
+                        formatted_message = f"Event: {data['event']} - {json.dumps(data['params'])}"
+                else:
+                    # Other events: just show the event name and params
+                    formatted_message = f"Event: {data['event']} - {json.dumps(data['params'])}"
     except Exception as e:
         print(f"Error parsing message as JSON: {e}")
 
