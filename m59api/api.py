@@ -2863,6 +2863,8 @@ def pipe_server_windows(pipe_name):
             time.sleep(1)
 
 async def pipe_listener_linux(path):
+    import fcntl
+    
     if not os.path.exists(path):
         try:
             os.mkfifo(path)
@@ -2876,21 +2878,58 @@ async def pipe_listener_linux(path):
 
     loop = asyncio.get_running_loop()
     while True:
+        fd = None
         try:
-            # Open the FIFO in a thread to avoid blocking the event loop
-            with await loop.run_in_executor(None, lambda: open(path, "r")) as fifo:
-                print(f"FIFO listener started: {path}")
-                while True:
-                    line = await loop.run_in_executor(None, fifo.readline)
-                    if line:
-                        msg = line.strip()
-                        print(f"Received from FIFO {path}: {msg}")
-                        await send_to_webhook(msg)
+            # Open FIFO in non-blocking mode so we don't wait for a writer
+            # This allows blakserv to connect with O_NONBLOCK successfully
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            print(f"FIFO listener started: {path}")
+            
+            buffer = b""
+            while True:
+                try:
+                    # Read available data (up to 4096 bytes like Windows)
+                    data = await loop.run_in_executor(None, lambda: os.read(fd, 4096))
+                    if data:
+                        buffer += data
+                        # Process complete JSON messages
+                        while buffer:
+                            # Look for newline delimiter first
+                            if b'\n' in buffer:
+                                line, buffer = buffer.split(b'\n', 1)
+                                if line.strip():
+                                    msg = line.decode(errors='replace').strip()
+                                    print(f"Received from FIFO {path}: {msg}")
+                                    await send_to_webhook(msg)
+                            # If buffer starts with { and ends with }, it's a complete JSON
+                            elif buffer.startswith(b'{') and buffer.rstrip().endswith(b'}'):
+                                msg = buffer.decode(errors='replace').strip()
+                                print(f"Received from FIFO {path}: {msg}")
+                                await send_to_webhook(msg)
+                                buffer = b""
+                            else:
+                                # Wait for more data
+                                break
                     else:
+                        # FIFO returns empty when writer closes - wait for new writer
                         await asyncio.sleep(0.1)
+                except BlockingIOError:
+                    # No data available yet (EAGAIN/EWOULDBLOCK)
+                    await asyncio.sleep(0.05)
+                except OSError as e:
+                    if e.errno == 11:  # EAGAIN
+                        await asyncio.sleep(0.05)
+                    else:
+                        raise
         except Exception as e:
             print(f"FIFO listener error ({path}): {e}")
             await asyncio.sleep(1)
+        finally:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except:
+                    pass
 
 # Patch startup_event to use multiple pipe servers
 @router.on_event("startup")
@@ -2944,7 +2983,7 @@ def format_death_message(event_data: dict) -> str:
         }
     
     Example output:
-        "?? PlayerOne was just killed by a spider."
+        ":skull: PlayerOne was just killed by a spider."
     
     Args:
         event_data: Dictionary with 'event', 'params' keys containing:
@@ -2970,26 +3009,31 @@ def format_death_message(event_data: dict) -> str:
     # M59 uses: %q for names (quoted), %s for articles/text, %d for numbers
     # param1, param2, param3, etc. are substituted in order
     
-    # Build list of param values in order, including empty ones
+    # Build list of param values in order, preserving spacing
+    # NOTE: Do NOT strip param values - articles like "a " need their trailing space
     param_values = []
     for i in range(1, 8):
         param_key = f"param{i}"
         # Get param value, default to empty string if not present
         value = params.get(param_key, "")
-        # Convert to string and strip whitespace
-        param_values.append(str(value).strip() if value else "")
+        # Convert to string but preserve whitespace (articles have trailing spaces)
+        param_values.append(str(value) if value else "")
     
-    # Replace placeholders in order
-    # Note: M59's string format uses %q, %s, %d - we'll replace them sequentially
-    # Empty params get replaced with empty string (effectively removing them)
-    for value in param_values:
-        # Replace first occurrence of %q, %s, or %d (even if value is empty)
-        if "%q" in formatted:
-            formatted = formatted.replace("%q", value, 1)
-        elif "%s" in formatted:
-            formatted = formatted.replace("%s", value, 1)
-        elif "%d" in formatted:
-            formatted = formatted.replace("%d", value, 1)
+    # Replace placeholders in order they appear in the template
+    # Find all placeholder positions and replace in sequence
+    import re
+    placeholder_pattern = re.compile(r'%[qsd]')
+    
+    param_index = 0
+    def replace_placeholder(match):
+        nonlocal param_index
+        if param_index < len(param_values):
+            value = param_values[param_index]
+            param_index += 1
+            return value
+        return match.group(0)  # Keep placeholder if no more params
+    
+    formatted = placeholder_pattern.sub(replace_placeholder, formatted)
     
     # Select appropriate emoji based on message content
     emoji = DEATH_EMOJIS["default"]
@@ -3000,14 +3044,17 @@ def format_death_message(event_data: dict) -> str:
     
     # Replace ### prefix with emoji
     if formatted.startswith("###"):
-        formatted = formatted.replace("###", emoji + " ", 1)
+        formatted = formatted.replace("###", emoji, 1)
     else:
         # Add emoji if not already present
         formatted = f"{emoji} {formatted}"
     
-    # Clean up any double spaces caused by empty params
+    # Clean up any double spaces caused by empty params, but preserve single spaces
     while "  " in formatted:
         formatted = formatted.replace("  ", " ")
+    
+    # Final trim
+    formatted = formatted.strip()
     
     return formatted.strip()
 
