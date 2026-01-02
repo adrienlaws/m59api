@@ -5,10 +5,10 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="m59api",
-    version="0.1.36",
+    version="0.2.2",
     author="Adrien Laws",
     author_email="laws.adrien@gmail.com",
-    description="A FastAPI-based API for managing the Meridian 59 server.",
+    description="A FastAPI-based API for managing Meridian 59 servers with multi-server webhook routing.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/adrienlaws/m59api",

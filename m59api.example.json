@@ -1,0 +1,21 @@
+{
+  "default_webhook_url": "https://discord.com/api/webhooks/.../fallback",
+  "servers": [
+    {
+      "prefix": "",
+      "webhook_url": "https://discord.com/api/webhooks/.../main-server"
+    },
+    {
+      "prefix": "101",
+      "webhook_url": "https://discord.com/api/webhooks/.../server-101"
+    },
+    {
+      "prefix": "102",
+      "webhook_url": "https://discord.com/api/webhooks/.../server-102"
+    },
+    {
+      "prefix": "dev",
+      "webhook_url": "https://discord.com/api/webhooks/.../dev-testing"
+    }
+  ]
+}

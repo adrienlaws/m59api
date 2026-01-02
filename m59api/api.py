@@ -10,10 +10,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Body, status
 
 from m59api.maintenance import MaintenanceClient
-from m59api.config import DISCORD_WEBHOOK_URL
-
-# Load the Discord webhook URL from the environment variable
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+from m59api import config
 
 router = APIRouter()
 client = MaintenanceClient()
@@ -81,7 +78,9 @@ async def create_automated(username: str, password: str, email: str = ""):
 @router.post("/admin/set-webhook-endpoint")
 async def set_webhook_endpoint(webhook_url: str):
     """
-    Set the webhook endpoint URL at runtime.
+    DEPRECATED: Use /admin/webhook/update instead for multi-server support.
+    
+    Set the webhook endpoint URL at runtime for the main server (no prefix).
 
     Args:
         webhook_url (str): The webhook endpoint URL to set.
@@ -89,9 +88,52 @@ async def set_webhook_endpoint(webhook_url: str):
     Returns:
         JSON response indicating success and the new webhook URL.
     """
-    global RUNTIME_DISCORD_WEBHOOK_URL
-    RUNTIME_DISCORD_WEBHOOK_URL = webhook_url
-    return {"status": "success", "webhook_url": webhook_url}
+    if config.update_webhook_url("", webhook_url):
+        return {"status": "success", "webhook_url": webhook_url, "prefix": "(main server)"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid webhook URL (must start with https://)")
+
+
+@router.post("/admin/webhook/update")
+async def update_webhook_url(prefix: str = "", webhook_url: str = Body(...)):
+    """
+    Update webhook URL for a specific server prefix at runtime.
+    
+    Args:
+        prefix (str): Server prefix (empty string for main server, 'server1', 'server2', etc.)
+        webhook_url (str): Discord webhook URL (must start with https://)
+    
+    Returns:
+        JSON response with updated configuration.
+    """
+    if config.update_webhook_url(prefix, webhook_url):
+        return {
+            "status": "success",
+            "prefix": prefix or "(main server)",
+            "webhook_url": webhook_url
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook URL (must start with https://)"
+        )
+
+
+@router.get("/admin/webhook/list")
+async def list_webhook_configs():
+    """
+    List all configured webhook URLs with their prefixes.
+    
+    Returns:
+        JSON response with list of prefix-webhook configurations.
+    """
+    configs = config.get_all_webhook_configs()
+    return {
+        "status": "success",
+        "count": len(configs),
+        "webhooks": configs
+    }
+
 
 @router.post("/admin/discord-webhook")
 async def send_to_discord_webhook(message: str):
@@ -2786,16 +2828,14 @@ async def admin_say(message: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Pipe path for cross-platform support
-if platform.system() == "Windows":
-    PIPE_PATHS = [fr'\\.\pipe\m59apiwebhook{i}' for i in range(1, 11)]
-else:
-    # Linux and macOS both support FIFO pipes - create multiple for multi-server support
-    PIPE_PATHS = [f'/tmp/m59apiwebhook{i}' for i in range(1, 11)]
-
+# Pipe server state
 _pipe_server_started = False
 
-def pipe_server_windows(pipe_name):
+def pipe_server_windows(pipe_name: str):
+    """
+    Windows named pipe server. Runs in a thread.
+    pipe_name is the full path like \\.\pipe\101_m59apiwebhook1
+    """
     import win32pipe, win32file, pywintypes
     while True:
         pipe = None
@@ -2835,7 +2875,7 @@ def pipe_server_windows(pipe_name):
                         print(f"Received from pipe ({pipe_name}): {msg}")
                         global MAIN_LOOP
                         if MAIN_LOOP is not None:
-                            asyncio.run_coroutine_threadsafe(send_to_webhook(msg), MAIN_LOOP)
+                            asyncio.run_coroutine_threadsafe(send_to_webhook(msg, pipe_name), MAIN_LOOP)
                         else:
                             print("MAIN_LOOP is not set! Cannot send to webhook.")
                     except pywintypes.error as e:
@@ -2862,7 +2902,11 @@ def pipe_server_windows(pipe_name):
                     print(f"Error closing pipe handle {pipe_name}: {close_err}")
             time.sleep(1)
 
-async def pipe_listener_linux(path):
+async def pipe_listener_linux(path: str):
+    """
+    Linux/macOS FIFO pipe listener. Runs as an async task.
+    path is the full path like /tmp/101_m59apiwebhook1
+    """
     import fcntl
     
     if not os.path.exists(path):
@@ -2900,12 +2944,12 @@ async def pipe_listener_linux(path):
                                 if line.strip():
                                     msg = line.decode(errors='replace').strip()
                                     print(f"Received from FIFO {path}: {msg}")
-                                    await send_to_webhook(msg)
+                                    await send_to_webhook(msg, path)
                             # If buffer starts with { and ends with }, it's a complete JSON
                             elif buffer.startswith(b'{') and buffer.rstrip().endswith(b'}'):
                                 msg = buffer.decode(errors='replace').strip()
                                 print(f"Received from FIFO {path}: {msg}")
-                                await send_to_webhook(msg)
+                                await send_to_webhook(msg, path)
                                 buffer = b""
                             else:
                                 # Wait for more data
@@ -2934,19 +2978,41 @@ async def pipe_listener_linux(path):
 # Patch startup_event to use multiple pipe servers
 @router.on_event("startup")
 async def startup_event():
-    global _pipe_server_started, MAIN_LOOP  # <-- add MAIN_LOOP here!
+    global _pipe_server_started, MAIN_LOOP
     if _pipe_server_started:
         return
+    
     system = platform.system()
     MAIN_LOOP = asyncio.get_running_loop()
-    if system == "Windows":
-        for pipe_name in PIPE_PATHS:
-            threading.Thread(target=pipe_server_windows, args=(pipe_name,), daemon=True).start()
-    elif system in ["Linux", "Darwin"]:  # Darwin is macOS
-        for pipe_path in PIPE_PATHS:
-            asyncio.create_task(pipe_listener_linux(pipe_path))
-    else:
-        print(f"Pipe listener not started: unsupported OS {system}")
+    
+    # Get configured servers from config module
+    servers = config.get_servers()
+    
+    if not servers:
+        print("No webhook servers configured. Pipe listeners will not be started.")
+        print("Configure servers in m59api.json or set DISCORD_WEBHOOK_URL env var.")
+        _pipe_server_started = True
+        return
+    
+    # Start pipe listeners for each configured server
+    total_pipes = 0
+    for server_config in servers:
+        pipe_paths = server_config.get_pipe_paths()
+        prefix_label = f"prefix='{server_config.prefix}'" if server_config.prefix else "no prefix"
+        print(f"Starting pipe listeners for {prefix_label}")
+        
+        if system == "Windows":
+            for pipe_name in pipe_paths:
+                threading.Thread(target=pipe_server_windows, args=(pipe_name,), daemon=True).start()
+                total_pipes += 1
+        elif system in ["Linux", "Darwin"]:  # Darwin is macOS
+            for pipe_path in pipe_paths:
+                asyncio.create_task(pipe_listener_linux(pipe_path))
+                total_pipes += 1
+        else:
+            print(f"Pipe listener not started: unsupported OS {system}")
+    
+    print(f"Started {total_pipes} pipe listeners for {len(servers)} server(s)")
     _pipe_server_started = True
 
 
@@ -3058,10 +3124,23 @@ def format_death_message(event_data: dict) -> str:
     
     return formatted.strip()
 
-async def send_to_webhook(message: str):
-    webhook_url = RUNTIME_DISCORD_WEBHOOK_URL or os.getenv("DISCORD_WEBHOOK_URL")
+async def send_to_webhook(message: str, pipe_path: str = ""):
+    """
+    Send a message to the appropriate Discord webhook based on the pipe path.
+    
+    Args:
+        message: The message received from the pipe (JSON or plain text)
+        pipe_path: The pipe path the message came from, used to route to correct webhook
+    """
+    # Get webhook URL based on pipe path (for multi-server routing)
+    webhook_url = config.get_webhook_url_for_pipe(pipe_path)
+    
+    # Fall back to runtime or env var for backwards compatibility
     if not webhook_url:
-        print("No webhook URL set.")
+        webhook_url = RUNTIME_DISCORD_WEBHOOK_URL or os.getenv("DISCORD_WEBHOOK_URL")
+    
+    if not webhook_url:
+        print(f"No webhook URL configured for pipe: {pipe_path}")
         return
 
     # Try to parse as JSON and format for Discord if possible
@@ -3089,9 +3168,9 @@ async def send_to_webhook(message: str):
     except Exception as e:
         print(f"Error parsing message as JSON: {e}")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as http_client:
         try:
-            resp = await client.post(webhook_url, json={"content": formatted_message})
+            resp = await http_client.post(webhook_url, json={"content": formatted_message})
             if resp.status_code not in (200, 204):
                 print(f"Discord webhook error: {resp.status_code} {resp.text}")
         except Exception as e:

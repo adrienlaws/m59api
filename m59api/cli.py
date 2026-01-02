@@ -1,6 +1,8 @@
 import uvicorn
 import argparse
 
+from m59api import config
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run the Meridian 59 API server.")
@@ -27,8 +29,18 @@ def main():
         default="info",
         help="Set log level (default: info)",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to m59api.json config file for multi-server webhook routing",
+    )
 
     args = parser.parse_args()
+
+    # Load configuration before starting server
+    # This sets up the webhook URL mappings for each server prefix
+    config.load_config(args.config)
 
     print(f"\nAdmin API docs: http://{args.host}:{args.port}/docs")
 

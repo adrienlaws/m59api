@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "../Meridian59"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../m59-blakserv-docker"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.rc": "resource_files"
+		}
+	}
+}
